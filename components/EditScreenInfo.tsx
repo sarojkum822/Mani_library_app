@@ -48,8 +48,9 @@ export default function EditScreenInfo({ path }: { path: string }) {
 
 const styles = StyleSheet.create({
   getStartedContainer: {
-    alignItems: 'center',
-    marginHorizontal: 50,
+    alignItems: 'flex-start',
+    marginHorizontal: 20,
+    alignSelf: 'stretch',
   },
   homeScreenFilename: {
     marginVertical: 7,
@@ -61,17 +62,18 @@ const styles = StyleSheet.create({
   getStartedText: {
     fontSize: 17,
     lineHeight: 24,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   helpContainer: {
     marginTop: 15,
     marginHorizontal: 20,
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    alignSelf: 'stretch',
   },
   helpLink: {
     paddingVertical: 15,
   },
   helpLinkText: {
-    textAlign: 'center',
+    textAlign: 'left',
   },
 });
