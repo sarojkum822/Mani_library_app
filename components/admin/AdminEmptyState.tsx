@@ -2,7 +2,13 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
-import { adminEmptyChrome, CLARITY_CARD_PADDING, useAdminPalette } from '@/components/admin/clarityTokens';
+import {
+  adminEmptyChrome,
+  CLARITY_BODY,
+  CLARITY_CARD_PADDING,
+  CLARITY_SECTION_TITLE,
+  useAdminPalette,
+} from '@/components/admin/clarityTokens';
 import { Button } from '@/components/ui/Button';
 
 type Props = {
@@ -21,8 +27,8 @@ export function AdminEmptyState({ icon = 'inbox', title, body, actionLabel, onAc
       <View style={[styles.iconWrap, { backgroundColor: c.surfaceMuted }]}>
         <FontAwesome name={icon} size={22} color={c.ink400} />
       </View>
-      <Text style={[styles.title, { color: c.ink900 }]}>{title}</Text>
-      {body ? <Text style={[styles.body, { color: c.ink600 }]}>{body}</Text> : null}
+      <Text style={[CLARITY_SECTION_TITLE, styles.title, { color: c.ink900 }]}>{title}</Text>
+      {body ? <Text style={[CLARITY_BODY, styles.body, { color: c.ink600 }]}>{body}</Text> : null}
       {actionLabel && onAction ? (
         <Button title={actionLabel} variant="secondary" onPress={onAction} style={styles.btn} />
       ) : null}
@@ -44,7 +50,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 4,
   },
-  title: { fontSize: 17, fontWeight: '600', textAlign: 'center' },
-  body: { fontSize: 15, lineHeight: 22, textAlign: 'center', fontWeight: '400' },
+  title: { textAlign: 'center' },
+  body: { textAlign: 'center' },
   btn: { marginTop: 8, alignSelf: 'stretch' },
 });

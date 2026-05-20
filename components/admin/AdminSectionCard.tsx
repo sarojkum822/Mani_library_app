@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 import {
   adminCardChrome,
+  CLARITY_HINT_META,
   CLARITY_SECTION_TITLE,
   useAdminPalette,
 } from '@/components/admin/clarityTokens';
@@ -43,7 +44,7 @@ export function AdminSectionCard({
         <View style={styles.headText}>
           <Text style={[styles.title, CLARITY_SECTION_TITLE, { color: c.ink900 }]}>{title}</Text>
           {description ? (
-            <Text style={[styles.desc, { color: c.ink600 }]} numberOfLines={4}>
+            <Text style={[CLARITY_HINT_META, styles.desc, { color: c.ink600 }]} numberOfLines={4}>
               {description}
             </Text>
           ) : null}
@@ -68,6 +69,6 @@ const styles = StyleSheet.create({
   },
   headText: { flex: 1, minWidth: 0 },
   title: {},
-  desc: { marginTop: 4, fontSize: 13, fontWeight: '400', lineHeight: 18 },
+  desc: { marginTop: 4 },
   body: { paddingHorizontal: 0, paddingBottom: 2 },
 });

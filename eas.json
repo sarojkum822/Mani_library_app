@@ -12,11 +12,19 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://www.manilibrary.com",
+        "EXPO_PUBLIC_API_GET_CACHE_MS": "30000"
       }
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://www.manilibrary.com",
+        "EXPO_PUBLIC_API_GET_CACHE_MS": "30000"
       }
     }
   },

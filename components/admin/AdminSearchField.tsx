@@ -2,7 +2,8 @@ import React from 'react';
 import { Platform, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
-import { adminSearchChrome, CLARITY_MIN_TOUCH, useAdminPalette } from '@/components/admin/clarityTokens';
+import { adminSearchChrome, CLARITY_BODY_SM, CLARITY_MIN_TOUCH, useAdminPalette } from '@/components/admin/clarityTokens';
+import { FONT_SANS } from '@/constants/Fonts';
 
 type Props = TextInputProps & {
   containerStyle?: object;
@@ -42,8 +43,8 @@ const styles = StyleSheet.create({
   icon: { marginRight: 8 },
   input: {
     flex: 1,
+    fontFamily: FONT_SANS.regular,
     fontSize: 16,
-    fontWeight: '400',
     paddingVertical: 11,
     minHeight: CLARITY_MIN_TOUCH,
   },

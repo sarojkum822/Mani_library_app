@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AdminAvatar } from '@/components/admin/AdminAvatar';
 import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
 import { AdminListRow } from '@/components/admin/AdminListRow';
+import { AdminListSkeleton } from '@/components/admin/AdminListSkeleton';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { AdminSectionCard } from '@/components/admin/AdminSectionCard';
 import { AdminSegmentedControl, type AdminSegment } from '@/components/admin/AdminSegmentedControl';
@@ -15,7 +16,9 @@ import { useLibraryInfo } from '@/components/library/LibraryInfoProvider';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { MembershipStatusBadge } from '@/components/admin/MembershipStatusBadge';
+import { useStaleWhileRevalidate } from '@/hooks/useStaleWhileRevalidate';
 import { api } from '@/lib/api';
+import { cacheKeys } from '@/lib/dataCache';
 import { deviceUserIdInlineLabel } from '@/lib/deviceUserIdLabel';
 import {
   daysUntil,
@@ -46,28 +49,23 @@ export default function AdminSubscriptionsScreen() {
   const { auth } = useAuth();
   const token = auth.status === 'signed_in' ? auth.token : null;
 
-  const [members, setMembers] = useState<Member[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [tab, setTab] = useState<SubTab>('expiring');
 
-  const load = useCallback(async () => {
-    if (!token) {
-      setMembers([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      setMembers(await api.adminMembersList(token));
-    } catch {
-      setMembers([]);
-    } finally {
-      setLoading(false);
-    }
+  const fetchMembers = useCallback(async () => {
+    if (!token) throw new Error('Sign in as admin to load members.');
+    return api.adminMembersList(token);
   }, [token]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { data, loading, revalidating, error } = useStaleWhileRevalidate<Member[]>({
+    cacheKey: cacheKeys.adminMembers,
+    fetcher: fetchMembers,
+    refreshKey,
+    enabled: !!token,
+  });
+
+  const members = data ?? [];
+  const listLoading = loading && members.length === 0;
 
   const planDistribution = useMemo(
     () =>
@@ -112,17 +110,22 @@ export default function AdminSubscriptionsScreen() {
       style={[styles.root, { backgroundColor: c.surfaceMuted }]}
       contentContainerStyle={adminScrollContentInsets(insets.bottom)}
       showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={c.azure500} />}
+      refreshControl={
+        <RefreshControl
+          refreshing={revalidating}
+          onRefresh={() => setRefreshKey((k) => k + 1)}
+          tintColor={c.azure500}
+        />
+      }
     >
       <AdminPageHeader
         eyebrow="subscriptions"
         title="Subscriptions"
         description="Renewal windows and plan counts from your live roster."
       />
-      {loading && members.length === 0 ? (
-        <View style={{ paddingVertical: 16 }}>
-          <ActivityIndicator color={c.azure500} />
-        </View>
+      {listLoading ? <AdminListSkeleton rows={4} /> : null}
+      {error && members.length === 0 ? (
+        <Text style={{ color: c.ink600, paddingVertical: 12 }}>{error}</Text>
       ) : null}
 
       <View style={styles.planGrid}>

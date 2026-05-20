@@ -1,8 +1,10 @@
 import {
   api,
+  type MemberProfile,
   type Membership,
   type MembershipHistoryEntry,
 } from '@/lib/api';
+import { cacheKeys, getDataCache, setDataCache } from '@/lib/dataCache';
 
 type WarmCore = {
   token: string;
@@ -78,4 +80,36 @@ export function clearWarmMemberCore(): void {
 /** Drop cached core data so the next fetch hits the network (pull-to-refresh, after payment). */
 export function invalidateWarmMemberCore(): void {
   cached = null;
+}
+
+let profileInflight: Promise<MemberProfile | null> | null = null;
+let profileInflightToken: string | null = null;
+
+/** Start member profile fetch early (parallel with membership warm). */
+export function warmMemberProfile(token: string): void {
+  if (getDataCache<MemberProfile>(cacheKeys.memberProfile)) return;
+  if (profileInflight && profileInflightToken === token) return;
+  profileInflightToken = token;
+  profileInflight = api
+    .memberProfile(token)
+    .then((p) => {
+      setDataCache(cacheKeys.memberProfile, p);
+      return p;
+    })
+    .catch(() => null)
+    .finally(() => {
+      profileInflight = null;
+    });
+}
+
+export function peekWarmMemberProfile(): MemberProfile | null {
+  return getDataCache<MemberProfile>(cacheKeys.memberProfile);
+}
+
+export async function consumeWarmMemberProfile(token: string): Promise<MemberProfile | null> {
+  const cached = peekWarmMemberProfile();
+  if (cached) return cached;
+  if (profileInflight && profileInflightToken === token) return profileInflight;
+  warmMemberProfile(token);
+  return profileInflight ?? null;
 }

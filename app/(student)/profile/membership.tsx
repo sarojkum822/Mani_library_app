@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { StudentSectionLabel } from '@/components/student/StudentSectionLabel';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -115,7 +116,7 @@ export default function ProfileMembershipScreen() {
         )}
       </Card>
 
-      <Text style={[styles.sectionHdr, { color: c.ink500 }]}>Related</Text>
+      <StudentSectionLabel title="Related" />
       <Card style={{ padding: 0, overflow: 'hidden', marginTop: 6 }}>
         <SettingsRow
           iconIon="wallet-outline"
@@ -128,14 +129,3 @@ export default function ProfileMembershipScreen() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  sectionHdr: {
-    fontSize: 13,
-    fontWeight: '400',
-    letterSpacing: -0.08,
-    textTransform: 'uppercase',
-    marginTop: 28,
-    paddingHorizontal: 4,
-  },
-});

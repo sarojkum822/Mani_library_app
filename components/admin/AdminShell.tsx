@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Animated, Easing, Platform, Pressable, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
 import { headerElevation } from '@/lib/platformStyles';
@@ -10,6 +10,12 @@ import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { AdminTopbar } from '@/components/admin/AdminTopbar';
 
 const LG_MIN_WIDTH = 1024;
+
+/** Edge-to-edge Android can report 0 top inset briefly — never place chrome under the status bar. */
+function adminTopInset(insetsTop: number): number {
+  if (Platform.OS !== 'android') return insetsTop;
+  return Math.max(insetsTop, StatusBar.currentHeight ?? 0);
+}
 
 /**
  * Same structure as `manilibrary/src/components/dashboard/DashboardShell.tsx`:
@@ -21,6 +27,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const topPad = adminTopInset(insets.top);
   const isWide = width >= LG_MIN_WIDTH;
 
   const drawerWidth = Math.min(300, Math.round(width * 0.86));
@@ -77,14 +85,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }, [closedX, isWide, sidebarOpen, slide]);
 
   return (
-    <View style={[styles.root, { backgroundColor: c.surfaceMuted }]}>
+    <View
+      style={[
+        styles.root,
+        {
+          backgroundColor: c.surfaceMuted,
+          paddingTop: topPad,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+        },
+      ]}
+    >
       {isWide ? <AdminSidebar /> : null}
 
-      {/* Left/right safe areas so top bar & sheet share the same horizontal inset as notched devices. */}
-      <SafeAreaView
-        style={[styles.mainColumn, { backgroundColor: c.surfaceMuted }]}
-        edges={['top', 'left', 'right']}
-      >
+      <View style={[styles.mainColumn, { backgroundColor: c.surfaceMuted }]}>
         <View style={[styles.column, Platform.OS === 'android' && styles.columnAndroid]}>
           <View
             style={[
@@ -152,7 +166,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </>
           ) : null}
         </View>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

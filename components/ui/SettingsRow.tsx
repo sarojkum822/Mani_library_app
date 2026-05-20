@@ -3,7 +3,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import { CLARITY_BODY, CLARITY_HINT, CLARITY_ROW_PRESS_BG } from '@/components/admin/clarityTokens';
 import Colors from '@/constants/Colors';
+import { FONT_SANS } from '@/constants/Fonts';
 import { useColorScheme } from '@/components/useColorScheme';
 import { hapticLight } from '@/lib/safeHaptics';
 
@@ -22,7 +24,6 @@ export function SettingsRow({
   disabled,
 }: {
   icon?: FAName;
-  /** Prefer for iOS-style profile menus (SF Symbols–like). */
   iconIon?: IonName;
   title: string;
   subtitle?: string;
@@ -34,10 +35,10 @@ export function SettingsRow({
 }) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
-  const titleColor = destructive ? '#D92D20' : c.ink900;
-  const subColor = destructive ? 'rgba(217,45,32,0.75)' : c.ink500;
-  const iconTint = destructive ? '#D92D20' : c.azure600;
-  const wrapBg = destructive ? 'rgba(217,45,32,0.08)' : c.azure50;
+  const titleColor = destructive ? c.red700 : c.ink900;
+  const subColor = destructive ? c.red700 : c.ink500;
+  const iconTint = destructive ? c.red700 : c.azure600;
+  const wrapBg = destructive ? c.red100 : c.azure50;
 
   return (
     <Pressable
@@ -51,7 +52,7 @@ export function SettingsRow({
       style={({ pressed }) => [
         styles.row,
         showSeparator && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
-        pressed && onPress && !disabled ? { backgroundColor: c.surfaceMuted } : null,
+        pressed && onPress && !disabled ? { backgroundColor: CLARITY_ROW_PRESS_BG } : null,
         disabled ? { opacity: 0.45 } : null,
       ]}
     >
@@ -67,11 +68,13 @@ export function SettingsRow({
         <View style={{ width: 44 }} />
       )}
       <View style={styles.textCol}>
-        <Text style={[styles.title, { color: titleColor }]}>{title}</Text>
-        {subtitle ? <Text style={[styles.sub, { color: subColor }]}>{subtitle}</Text> : null}
+        <Text style={[CLARITY_BODY, styles.title, { color: titleColor, fontFamily: FONT_SANS.regular }]}>{title}</Text>
+        {subtitle ? (
+          <Text style={[CLARITY_HINT, styles.sub, { color: subColor }]}>{subtitle}</Text>
+        ) : null}
       </View>
       {detail ? (
-        <Text style={[styles.detail, { color: c.ink500 }]} numberOfLines={1}>
+        <Text style={[styles.detail, { color: c.ink500, fontFamily: FONT_SANS.regular }]} numberOfLines={1}>
           {detail}
         </Text>
       ) : null}
@@ -88,7 +91,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 48,
+    minHeight: 52,
     paddingVertical: 11,
     paddingHorizontal: 16,
     gap: 14,
@@ -96,25 +99,13 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 44,
     height: 44,
-    borderRadius: 11,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   textCol: { flex: 1, minWidth: 0 },
-  /** iOS Settings–style body (≈17pt SF Pro). */
-  title: {
-    fontSize: 17,
-    fontWeight: '400',
-    letterSpacing: -0.43,
-    lineHeight: 22,
-  },
-  sub: {
-    fontSize: 13,
-    fontWeight: '400',
-    marginTop: 2,
-    lineHeight: 18,
-    letterSpacing: -0.08,
-  },
-  detail: { fontSize: 15, fontWeight: '400', maxWidth: '36%', letterSpacing: -0.24 },
+  title: { fontSize: 16 },
+  sub: { marginTop: 2 },
+  detail: { fontSize: 15, maxWidth: '36%' },
   chev: { marginLeft: 2 },
 });

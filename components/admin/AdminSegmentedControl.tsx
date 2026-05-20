@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import Colors from '@/constants/Colors';
+import { FONT_SANS } from '@/constants/Fonts';
 import { useColorScheme } from '@/components/useColorScheme';
 
 export type AdminSegment<T extends string> = {
@@ -78,6 +79,6 @@ const styles = StyleSheet.create({
     minHeight: 36,
     justifyContent: 'center',
   },
-  label: { fontSize: 13, fontWeight: '500' },
-  labelSelected: { fontWeight: '600' },
+  label: { fontFamily: FONT_SANS.medium, fontSize: 13 },
+  labelSelected: { fontFamily: FONT_SANS.semibold },
 });

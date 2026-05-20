@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 /**
  * Shared admin chrome metrics so the top bar, menu sheet, and sidebar stay on one grid on every iPhone size.
  */
@@ -18,10 +20,13 @@ export const ADMIN_GROUP_RADIUS = 16;
  * Standard `contentContainerStyle` padding for admin `ScrollView` / `FlatList`.
  * Respects home indicator; use with `useSafeAreaInsets().bottom`.
  */
+/** Space below the fixed admin top bar before screen titles (Android needs a bit more). */
+export const ADMIN_CONTENT_TOP_PAD = Platform.OS === 'android' ? 12 : 8;
+
 export function adminScrollContentInsets(safeBottom: number, gap: number = ADMIN_SECTION_GAP) {
   return {
     paddingHorizontal: ADMIN_SCREEN_INSET,
-    paddingTop: 6,
+    paddingTop: ADMIN_CONTENT_TOP_PAD,
     paddingBottom: Math.max(safeBottom, 8) + 28,
     gap,
   };

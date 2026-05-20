@@ -18,7 +18,9 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { scaled } from '@/lib/fontScale';
 import { hapticLight } from '@/lib/safeHaptics';
 import { useColorScheme } from '@/components/useColorScheme';
-import { adminSearchChrome } from '@/components/admin/clarityTokens';
+import { adminSearchChrome, CLARITY_BODY_SM, CLARITY_MIN_TOUCH, CLARITY_MONO_SM, CLARITY_NAV_LABEL } from '@/components/admin/clarityTokens';
+import { dropdownElevation } from '@/lib/platformStyles';
+import { FONT_SANS } from '@/constants/Fonts';
 import { ADMIN_GUTTER, ADMIN_ROW_HEIGHT } from '@/components/admin/layoutTokens';
 
 /** Android adds extra font padding; without this, search label + chip text sit lower than icons. */
@@ -283,7 +285,7 @@ const styles = StyleSheet.create({
   searchIcon: { marginRight: 6, flexShrink: 0 },
   searchPlaceholderText: {
     flex: 1,
-    fontWeight: '500',
+    fontFamily: FONT_SANS.medium,
     minWidth: 0,
     paddingVertical: 2,
   },
@@ -311,10 +313,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: '#fff', fontWeight: '700', fontFamily: 'SpaceMono' },
+  avatarText: { color: '#fff', ...CLARITY_MONO_SM },
   accountText: { flex: 1, minWidth: 0 },
-  role: { fontWeight: '700' },
-  email: { fontFamily: 'SpaceMono', flexShrink: 1 },
+  role: { fontFamily: FONT_SANS.semibold, fontSize: 12, letterSpacing: 0 },
+  email: { ...CLARITY_MONO_SM, flexShrink: 1 },
   modalRoot: { flex: 1 },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -327,15 +329,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     overflow: 'hidden',
-    elevation: 8,
-    shadowColor: '#101828',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    ...dropdownElevation(),
   },
   dropdownHead: { padding: 12, borderBottomWidth: 1 },
-  ddRole: { fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
-  ddEmail: { marginTop: 6, fontSize: 11, fontFamily: 'SpaceMono', lineHeight: 16 },
+  ddRole: { fontFamily: FONT_SANS.semibold, fontSize: 14, textTransform: 'capitalize' },
+  ddEmail: { marginTop: 6, ...CLARITY_MONO_SM },
   ddRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -343,5 +341,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: ADMIN_GUTTER,
     paddingVertical: 12,
   },
-  ddSignOut: { fontSize: 14, fontWeight: '600' },
+  ddSignOut: { ...CLARITY_BODY_SM, fontFamily: CLARITY_NAV_LABEL.fontFamily },
 });

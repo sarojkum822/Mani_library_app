@@ -1,19 +1,20 @@
 /**
- * Shared type scale — use for hierarchy on student + auth flows.
+ * Shared type scale — student + auth flows (Clarity / Inter).
  */
 
+import { FONT_SANS } from '@/constants/Fonts';
+
 export const type = {
-  display: { fontSize: 34, lineHeight: 40, fontWeight: '600' as const },
-  screenTitle: { fontSize: 20, lineHeight: 26, fontWeight: '600' as const },
-  subtitle: { fontSize: 14, lineHeight: 20, fontWeight: '500' as const },
-  headline: { fontSize: 18, lineHeight: 24, fontWeight: '600' as const },
-  body: { fontSize: 15, lineHeight: 22, fontWeight: '400' as const },
-  bodyMedium: { fontSize: 15, lineHeight: 22, fontWeight: '500' as const },
-  caption: { fontSize: 13, lineHeight: 18, fontWeight: '500' as const },
-  mini: { fontSize: 12, lineHeight: 17, fontWeight: '500' as const },
+  display: { fontFamily: FONT_SANS.bold, fontSize: 34, lineHeight: 40 },
+  screenTitle: { fontFamily: FONT_SANS.semibold, fontSize: 20, lineHeight: 26 },
+  subtitle: { fontFamily: FONT_SANS.medium, fontSize: 14, lineHeight: 20 },
+  headline: { fontFamily: FONT_SANS.semibold, fontSize: 18, lineHeight: 24 },
+  body: { fontFamily: FONT_SANS.regular, fontSize: 15, lineHeight: 22 },
+  bodyMedium: { fontFamily: FONT_SANS.medium, fontSize: 15, lineHeight: 22 },
+  caption: { fontFamily: FONT_SANS.medium, fontSize: 13, lineHeight: 18 },
+  mini: { fontFamily: FONT_SANS.medium, fontSize: 12, lineHeight: 17 },
 } as const;
 
 export const rhythm = {
-  /** Space above major section kicks (matching 8px grid × 4) */
   sectionTop: 28,
 };

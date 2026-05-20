@@ -2,7 +2,13 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
-import { useAdminPalette } from '@/components/admin/clarityTokens';
+import {
+  CLARITY_HINT_META,
+  CLARITY_LIST_DETAIL,
+  CLARITY_LIST_TITLE,
+  CLARITY_ROW_PRESS_BG,
+  useAdminPalette,
+} from '@/components/admin/clarityTokens';
 
 type Props = {
   title: string;
@@ -34,17 +40,17 @@ export function AdminListRow({
     <>
       {left ? <View style={styles.left}>{left}</View> : null}
       <View style={styles.main}>
-        <Text style={[styles.title, { color: c.ink900 }]} numberOfLines={1}>
+        <Text style={[CLARITY_LIST_TITLE, { color: c.ink900 }]} numberOfLines={1}>
           {title}
         </Text>
         {subtitle ? (
-          <Text style={[styles.subtitle, { color: c.ink500 }]} numberOfLines={2}>
+          <Text style={[CLARITY_HINT_META, { color: c.ink500 }]} numberOfLines={2}>
             {subtitle}
           </Text>
         ) : null}
       </View>
       {detail ? (
-        <Text style={[styles.detail, { color: c.ink900 }]} numberOfLines={1}>
+        <Text style={[CLARITY_LIST_DETAIL, { color: c.ink900 }]} numberOfLines={1}>
           {detail}
         </Text>
       ) : null}
@@ -64,7 +70,7 @@ export function AdminListRow({
         onPress={onPress}
         style={({ pressed }) => [
           rowStyle,
-          pressed ? { backgroundColor: c.ink50, opacity: 0.96 } : null,
+          pressed ? { backgroundColor: CLARITY_ROW_PRESS_BG } : null,
         ]}
       >
         {inner}
@@ -88,14 +94,6 @@ const styles = StyleSheet.create({
   last: { borderBottomWidth: 0 },
   left: { flexShrink: 0 },
   main: { flex: 1, minWidth: 0, gap: 2 },
-  title: { fontSize: 16, fontWeight: '600', letterSpacing: -0.2 },
-  subtitle: { fontSize: 13, fontWeight: '400', lineHeight: 18 },
-  detail: {
-    fontSize: 15,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
-    flexShrink: 0,
-  },
   right: { flexShrink: 0 },
   chevron: { marginLeft: 2, flexShrink: 0 },
 });

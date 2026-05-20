@@ -7,35 +7,20 @@
     "icon": "./assets/images/icon.png",
     "scheme": "studentapp",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
-    "splash": {
-      "image": "./assets/images/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#E6F0FB"
-    },
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.studentapp",
       "icon": "./assets/images/icon.png",
-      "splash": {
-        "image": "./assets/images/splash.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#E6F0FB"
-      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "icon": "./assets/images/icon.png",
-      "splash": {
-        "image": "./assets/images/splash.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#E6F0FB"
-      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#0160D0"
+        "backgroundColor": "#E6F0FB"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -46,6 +31,9 @@
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
+    },
+    "splash": {
+      "backgroundColor": "#E6F0FB"
     },
     "plugins": [
       "expo-router",

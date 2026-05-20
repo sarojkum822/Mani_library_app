@@ -6,6 +6,7 @@ import {
   adminCardChrome,
   CLARITY_CARD_PADDING,
   CLARITY_CHIP_RADIUS,
+  CLARITY_HINT,
   CLARITY_KPI_VALUE,
   CLARITY_METRIC_LABEL,
   useAdminPalette,
@@ -41,7 +42,7 @@ export function AdminKpiCard({ label, value, hint, tone = 'neutral', icon }: Pro
         {value}
       </Text>
       {hint ? (
-        <Text style={[styles.hint, { color: c.ink500 }]} numberOfLines={4}>
+        <Text style={[CLARITY_HINT, { color: c.ink500 }]} numberOfLines={4}>
           {hint}
         </Text>
       ) : null}
@@ -65,5 +66,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   value: { marginTop: 10 },
-  hint: { marginTop: 6, fontSize: 12, fontWeight: '400', lineHeight: 16 },
 });

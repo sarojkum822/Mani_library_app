@@ -1,16 +1,9 @@
-import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 
+import { isExpoGoClient } from '@/lib/isExpoGo';
 import { openRazorpayCheckoutViaBridge, type RazorpaySuccessPayload } from '@/lib/razorpayCheckoutBridge';
 
 export type { RazorpaySuccessPayload };
-
-function isExpoGoClient(): boolean {
-  return (
-    Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
-    Constants.appOwnership === 'expo'
-  );
-}
 
 function isNativeModuleMissingError(message: string): boolean {
   return (

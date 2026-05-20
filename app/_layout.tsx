@@ -1,18 +1,32 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
+import {
+  JetBrainsMono_400Regular,
+  JetBrainsMono_500Medium,
+  JetBrainsMono_600SemiBold,
+  JetBrainsMono_700Bold,
+} from '@expo-google-fonts/jetbrains-mono';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { initialWindowMetrics, SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { ThemeProvider } from '@react-navigation/native';
 
 import { AppColorSchemeProvider } from '@/components/AppColorSchemeProvider';
 import { AuthProvider, useAuth } from '@/components/auth/AuthProvider';
 import { MemberPrefetchProvider } from '@/components/member/MemberPrefetchProvider';
 import { LibraryInfoProvider } from '@/components/library/LibraryInfoProvider';
 import { RazorpayExpoGoCheckoutHost } from '@/components/payments/RazorpayExpoGoCheckoutHost';
+import { applyClarityFontDefaults } from '@/lib/applyClarityFonts';
+import { ClarityNavigationTheme } from '@/lib/clarityNavigationTheme';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -24,36 +38,34 @@ export const unstable_settings = {
   initialRouteName: '(student)',
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+  const [loaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    JetBrainsMono_400Regular,
+    JetBrainsMono_500Medium,
+    JetBrainsMono_600SemiBold,
+    JetBrainsMono_700Bold,
     ...FontAwesome.font,
   });
 
-  /** Never leave the native splash up forever (fonts slow/fail on some devices, or dev client waiting). */
   useEffect(() => {
-    const failSafe = setTimeout(() => {
-      SplashScreen.hideAsync().catch(() => {});
-    }, 12_000);
-    return () => clearTimeout(failSafe);
-  }, []);
-
-  useEffect(() => {
-    if (loaded || error) {
+    if (loaded) {
+      applyClarityFontDefaults();
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [loaded, error]);
+  }, [loaded]);
 
-  // Wait for fonts unless they failed — then continue with system fonts so the app still opens.
-  if (!loaded && !error) {
+  if (!loaded) {
     return null;
   }
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <AppColorSchemeProvider>
         <RootLayoutNav />
       </AppColorSchemeProvider>
@@ -64,8 +76,8 @@ export default function RootLayout() {
 function RootLayoutNav() {
   return (
     <>
-      <StatusBar style="dark" translucent backgroundColor="transparent" />
-      <ThemeProvider value={DefaultTheme}>
+      <StatusBar style="dark" />
+      <ThemeProvider value={ClarityNavigationTheme}>
         <LibraryInfoProvider>
           <AuthProvider>
             <MemberPrefetchProvider>

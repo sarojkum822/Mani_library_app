@@ -1,7 +1,7 @@
 import React from 'react';
 import { Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
-import { CLARITY_METRIC_LABEL, useAdminPalette } from '@/components/admin/clarityTokens';
+import { CLARITY_METRIC_LABEL, clarityPageTitle, CLARITY_BODY, useAdminPalette } from '@/components/admin/clarityTokens';
 import { scaled } from '@/lib/fontScale';
 
 type Props = {
@@ -40,8 +40,8 @@ export function AdminPageHeader({ eyebrow, title, description, actions, style, h
         ) : null}
         <Text
           style={[
-            styles.title,
-            { color: c.ink900, fontSize: scaled(hero ? 32 : 26) },
+            clarityPageTitle(scaled(hero ? 32 : 26)),
+            { color: c.ink900 },
             Platform.OS === 'ios' && styles.titleIos,
           ]}
           maxFontSizeMultiplier={1.35}
@@ -50,7 +50,7 @@ export function AdminPageHeader({ eyebrow, title, description, actions, style, h
         </Text>
         {description ? (
           <Text
-            style={[styles.desc, { color: c.ink600, fontSize: scaled(15) }]}
+            style={[CLARITY_BODY, { color: c.ink600, fontSize: scaled(15) }]}
             maxFontSizeMultiplier={1.65}
           >
             {description}
@@ -81,9 +81,7 @@ const styles = StyleSheet.create({
   },
   textBlock: { flex: 1, minWidth: 0, gap: 6 },
   eyebrow: {},
-  title: { fontWeight: '700', letterSpacing: -0.8 },
   titleIos: { letterSpacing: -1 },
-  desc: { fontWeight: '400', marginTop: 4, lineHeight: 22 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   actionsStacked: { justifyContent: 'flex-start' },
 });

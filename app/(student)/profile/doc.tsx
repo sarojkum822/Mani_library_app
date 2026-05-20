@@ -12,8 +12,22 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { TextField } from '@/components/ui/TextField';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useMemberPrefetch } from '@/components/member/MemberPrefetchProvider';
 import { useLibraryInfo } from '@/components/library/LibraryInfoProvider';
-import { api, type DocumentState, type DocumentStatus, type DocumentType } from '@/lib/api';
+import {
+  api,
+  invalidateMemberAccountCache,
+  type DocumentState,
+  type DocumentStatus,
+  type DocumentType,
+  type MemberDocumentsPayload,
+  type MemberKycSlots,
+  type MemberProfile,
+} from '@/lib/api';
+import { cacheKeys, getDataCache } from '@/lib/dataCache';
+import type { KycDocType, MemberKycSlotSummary } from '@/lib/kycMemberSlots';
+import { prepareKycUploadFromLocalUri } from '@/lib/compressKycUpload';
+import { uploadDeferredMembershipKyc } from '@/lib/deferredMembershipKyc';
 import { MEMBERSHIP_INSTITUTION_OPTIONS, MEMBERSHIP_INSTITUTION_VALUES } from '@/lib/membershipInstitutionOptions';
 import { sanitizeAadhaarLastFourInput, sanitizeRollNumberDigitsInput } from '@/lib/intakeFieldLimits';
 import { planById } from '@/lib/membershipPlans';
@@ -25,9 +39,25 @@ const TARGETS: UploadTarget[] = [
   { type: 'student_id', label: 'Student ID' },
 ];
 
+const SLOT_ROWS: { key: KycDocType; label: string; uploadType: DocumentType }[] = [
+  { key: 'aadhaar_front', label: 'Aadhaar — front', uploadType: 'aadhaar' },
+  { key: 'aadhaar_back', label: 'Aadhaar — back', uploadType: 'aadhaar' },
+  { key: 'student_id', label: 'Student ID', uploadType: 'student_id' },
+];
+
+function guessMimeFromFileName(name: string, declared?: string | null): string {
+  if (declared && declared.includes('/')) return declared;
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.heic') || lower.endsWith('.heif')) return 'image/heic';
+  return 'image/jpeg';
+}
+
 function badge(status: DocumentState['status']) {
   if (status === 'verified') return 'Verified';
-  if (status === 'pending') return 'Pending';
+  if (status === 'pending') return 'Uploaded — awaiting review';
   if (status === 'rejected') return 'Rejected';
   return 'Not uploaded';
 }
@@ -45,6 +75,19 @@ function showDocumentUploadButton(verificationStatus: string, docStatus: Documen
   return true;
 }
 
+function slotMemberStatusLabel(ms: MemberKycSlotSummary['memberStatus']): string {
+  if (ms === 'verified') return 'Verified';
+  if (ms === 'pending_review') return 'Pending review';
+  if (ms === 'queued_checkout') return 'Queued until payment';
+  return 'Not uploaded';
+}
+
+function mapMemberSlotToDocStatus(ms: MemberKycSlotSummary['memberStatus']): DocumentStatus {
+  if (ms === 'verified') return 'verified';
+  if (ms === 'not_uploaded') return 'not_uploaded';
+  return 'pending';
+}
+
 function normalizeParam(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
@@ -53,13 +96,46 @@ function intakeValid(last4: string, institution: string): boolean {
   return /^\d{4}$/.test(last4) && MEMBERSHIP_INSTITUTION_VALUES.has(institution);
 }
 
+function applyIntakeFromProfile(
+  p: MemberProfile,
+  set: {
+    setLast4: (v: string) => void;
+    setRoll: (v: string) => void;
+    setInstitution: (v: string) => void;
+    setPreparing: (v: string) => void;
+  },
+) {
+  const l4 = (p.aadhaarLastFour ?? '').replace(/\D/g, '').slice(0, 4);
+  const inst = (p.institutionType ?? '').trim();
+  const instOk = MEMBERSHIP_INSTITUTION_VALUES.has(inst) ? inst : '';
+  set.setLast4(l4);
+  set.setRoll(sanitizeRollNumberDigitsInput(String(p.studentRollNumber ?? '')));
+  set.setInstitution(instOk);
+  set.setPreparing(p.preparingFor ?? '');
+}
+
+function applyDocumentsPack(
+  pack: MemberDocumentsPayload,
+  set: {
+    setDocs: (v: DocumentState[]) => void;
+    setVerificationStatus: (v: string) => void;
+    setMemberKycSlots: (v: MemberKycSlots | null) => void;
+  },
+) {
+  set.setDocs(pack.items);
+  set.setVerificationStatus(pack.verificationStatus);
+  set.setMemberKycSlots(pack.memberKycSlots ?? null);
+}
+
 export default function StudentDocScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const insets = useSafeAreaInsets();
   const { auth } = useAuth();
+  const prefetch = useMemberPrefetch();
   const lib = useLibraryInfo();
   const token = auth.status === 'signed_in' ? auth.token : null;
+  const seedDocuments = prefetch.documents ?? getDataCache<MemberDocumentsPayload>(cacheKeys.memberDocuments);
 
   const params = useLocalSearchParams<{
     afterSeat?: string | string[];
@@ -121,10 +197,13 @@ export default function StudentDocScreen() {
     }, [token, afterSeat, membershipCheckout, canGoToPayment]),
   );
 
-  const [docs, setDocs] = useState<DocumentState[]>([]);
-  const [verificationStatus, setVerificationStatus] = useState<string>('none');
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState<DocumentType | null>(null);
+  const [docs, setDocs] = useState<DocumentState[]>(() => seedDocuments?.items ?? []);
+  const [verificationStatus, setVerificationStatus] = useState<string>(() => seedDocuments?.verificationStatus ?? 'none');
+  const [memberKycSlots, setMemberKycSlots] = useState<MemberKycSlots | null>(
+    () => seedDocuments?.memberKycSlots ?? null,
+  );
+  const [loading, setLoading] = useState(() => !seedDocuments);
+  const [uploadingRow, setUploadingRow] = useState<string | null>(null);
 
   const [last4, setLast4] = useState('');
   const [roll, setRoll] = useState('');
@@ -140,67 +219,98 @@ export default function StudentDocScreen() {
 
   const intakeOk = !afterSeat || intakeValid(last4, institution);
 
-  const loadIntakeFromProfile = useCallback(async () => {
-    if (!token || !afterSeat) return;
-    try {
-      const p = await api.memberProfile(token);
-      const l4 = (p.aadhaarLastFour ?? '').replace(/\D/g, '').slice(0, 4);
-      const inst = (p.institutionType ?? '').trim();
-      const instOk = MEMBERSHIP_INSTITUTION_VALUES.has(inst) ? inst : '';
-      setLast4(l4);
-      setRoll(sanitizeRollNumberDigitsInput(String(p.studentRollNumber ?? '')));
-      setInstitution(instOk);
-      setPreparing(p.preparingFor ?? '');
-    } catch {
-      /* Prefill optional — server may not expose member-profile yet */
-    }
-  }, [token, afterSeat]);
-
-  async function refresh() {
-    if (!token) {
-      setDocs([]);
-      setVerificationStatus('none');
-      setLast4('');
-      setRoll('');
-      setInstitution('');
-      setPreparing('');
-      setLoading(false);
-      return;
-    }
-    if (!afterSeat) {
-      setLast4('');
-      setRoll('');
-      setInstitution('');
-      setPreparing('');
-    }
-    setLoading(true);
-    try {
-      const pack = await api.documents(token);
-      setDocs(pack.items);
-      setVerificationStatus(pack.verificationStatus);
-      if (afterSeat) await loadIntakeFromProfile();
-    } catch {
-      setDocs([]);
-      setVerificationStatus('none');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const intakeSetters = useMemo(
+    () => ({ setLast4, setRoll, setInstitution, setPreparing }),
+    [setLast4, setRoll, setInstitution, setPreparing],
+  );
+  const docSetters = useMemo(
+    () => ({ setDocs, setVerificationStatus, setMemberKycSlots }),
+    [setDocs, setVerificationStatus, setMemberKycSlots],
+  );
 
   useEffect(() => {
-    void refresh();
+    if (prefetch.documents) applyDocumentsPack(prefetch.documents, docSetters);
+    const prof = prefetch.profile ?? getDataCache<MemberProfile>(cacheKeys.memberProfile);
+    if (prof && afterSeat) applyIntakeFromProfile(prof, intakeSetters);
+    if (prefetch.documents) setLoading(false);
+  }, [prefetch.documents, prefetch.profile, afterSeat, docSetters, intakeSetters]);
+
+  const refresh = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      const silent = opts?.silent === true;
+      if (!token) {
+        setDocs([]);
+        setVerificationStatus('none');
+        setMemberKycSlots(null);
+        setLast4('');
+        setRoll('');
+        setInstitution('');
+        setPreparing('');
+        setLoading(false);
+        return;
+      }
+      if (!afterSeat) {
+        setLast4('');
+        setRoll('');
+        setInstitution('');
+        setPreparing('');
+      }
+      invalidateMemberAccountCache();
+      if (!silent && docs.length === 0) setLoading(true);
+      try {
+        await uploadDeferredMembershipKyc(token);
+        const pack = await api.documents(token);
+        applyDocumentsPack(pack, docSetters);
+        if (afterSeat) {
+          const prof = prefetch.profile ?? (await api.memberProfile(token));
+          applyIntakeFromProfile(prof, intakeSetters);
+        }
+      } catch {
+        if (!silent) {
+          setDocs([]);
+          setVerificationStatus('none');
+          setMemberKycSlots(null);
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, afterSeat, docs.length, docSetters, intakeSetters, prefetch.profile],
+  );
+
+  useEffect(() => {
+    if (!token) return;
+    if (seedDocuments) void refresh({ silent: true });
+    else void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, afterSeat]);
 
-  async function pickAndUpload(type: DocumentType) {
+  useFocusEffect(
+    useCallback(() => {
+      if (token) void refresh({ silent: true });
+    }, [token, refresh]),
+  );
+
+  async function pickAndUpload(opts: {
+    rowKey: string;
+    uploadType: DocumentType;
+    kycDocType?: 'aadhaar_front' | 'aadhaar_back';
+  }) {
     if (!token) return;
-    const row = byType.get(type);
-    if (!showDocumentUploadButton(verificationStatus, row?.status)) {
+    const { rowKey, uploadType, kycDocType } = opts;
+    const server = byType.get(uploadType);
+    let effectiveStatus: DocumentStatus = server?.status ?? 'not_uploaded';
+    if (memberKycSlots) {
+      const sk = rowKey as KycDocType;
+      const meta = memberKycSlots[sk];
+      if (meta) effectiveStatus = mapMemberSlotToDocStatus(meta.memberStatus);
+    }
+    if (!showDocumentUploadButton(verificationStatus, effectiveStatus)) {
       Alert.alert('Upload not needed', 'This document is already verified or uploads are closed for your account.');
       return;
     }
 
-    setUploading(type);
+    setUploadingRow(rowKey);
     try {
       const allowImage = await AlertPrompt(
         'Upload document',
@@ -212,9 +322,11 @@ export default function StudentDocScreen() {
       );
       if (allowImage === '__cancel__') return;
 
-      let fileName = `${type}.jpg`;
+      let localUri: string | undefined;
+      let fileName = `${rowKey}.jpg`;
       let mimeType = 'image/jpeg';
-      let base64: string | undefined;
+      let intrinsicWidth: number | undefined;
+      let intrinsicHeight: number | undefined;
 
       if (allowImage === 'image') {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -222,42 +334,52 @@ export default function StudentDocScreen() {
 
         const res = await ImagePicker.launchImageLibraryAsync({
           allowsEditing: false,
-          base64: true,
-          quality: 0.85,
+          quality: 1,
         });
         if (res.canceled) return;
-        base64 = res.assets[0]?.base64 ?? undefined;
-        fileName = res.assets[0]?.fileName ?? fileName;
-        mimeType = res.assets[0]?.mimeType ?? mimeType;
+        const a = res.assets[0];
+        if (!a?.uri) throw new Error('No file data found');
+        localUri = a.uri;
+        fileName = a.fileName ?? fileName;
+        mimeType = a.mimeType ?? guessMimeFromFileName(fileName);
+        intrinsicWidth = a.width;
+        intrinsicHeight = a.height;
       } else {
-        const res = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'], copyToCacheDirectory: true });
+        const res = await DocumentPicker.getDocumentAsync({
+          type: ['application/pdf', 'image/*'],
+          copyToCacheDirectory: true,
+        });
         if (res.canceled) return;
         const a = res.assets?.[0];
-        if (!a) return;
+        if (!a?.uri) return;
+        localUri = a.uri;
         fileName = a.name ?? fileName;
-        mimeType = a.mimeType ?? mimeType;
-        // DocumentPicker doesn't provide base64 directly; for backend-ready structure we require base64.
-        // In real integration, use file upload (multipart) endpoint. For now, show message.
-        Alert.alert('Large files', 'Please choose a photo from your gallery for now. PDF support is coming soon.');
-        // Fallback: use ImagePicker if you want base64; keep file flow as "not supported" for now.
-        throw new Error('Please use Camera / Gallery for this upload.');
+        mimeType = guessMimeFromFileName(fileName, a.mimeType);
       }
 
-      if (!base64) throw new Error('No file data found');
-      await api.uploadDocument(token, { type, fileName, mimeType, base64 });
+      if (!localUri) throw new Error('No file data found');
+      const prepared = await prepareKycUploadFromLocalUri({
+        localUri,
+        mimeType,
+        suggestedName: fileName,
+        intrinsicWidth,
+        intrinsicHeight,
+      });
+      await api.uploadDocument(token, {
+        type: uploadType,
+        ...(uploadType === 'aadhaar' ? { kycDocType: kycDocType ?? 'aadhaar_front' } : {}),
+        fileUri: prepared.fileUri,
+        fileName: prepared.fileName,
+        mimeType: prepared.mimeType,
+        deleteAfterUpload: prepared.deleteAfterUpload,
+      });
       await refresh();
     } catch (e: any) {
       Alert.alert('Upload failed', e?.message ?? 'Unknown error');
     } finally {
-      setUploading(null);
+      setUploadingRow(null);
     }
   }
-
-  const screenSubtitle = afterSeat
-    ? canGoToPayment
-      ? 'Add your details, then continue to payment. Document uploads are optional and you can add them later from your profile.'
-      : 'Add your details to continue. You can upload ID documents anytime—they are optional for this step.'
-    : 'Upload Aadhaar and student ID for verification';
 
   async function onContinueAfterSeat() {
     if (!token || !intakeValid(last4, institution)) return;
@@ -311,7 +433,11 @@ export default function StudentDocScreen() {
           gap: 12,
         }}
       >
-        <Text style={{ color: c.ink600, fontSize: 15, lineHeight: 22, fontWeight: '400' }}>{screenSubtitle}</Text>
+        {!afterSeat ? (
+          <Text style={{ color: c.ink600, fontSize: 15, lineHeight: 22, fontWeight: '400' }}>
+            Upload Aadhaar and student ID for verification
+          </Text>
+        ) : null}
         {afterSeat && token ? (
           <Card style={{ padding: 16, gap: 8 }}>
             <Text style={{ color: c.ink900, fontSize: 12, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' }}>
@@ -320,9 +446,6 @@ export default function StudentDocScreen() {
             <Text style={{ color: c.ink700, fontSize: 15, fontWeight: '600' }}>
               {plan?.title ?? planId ?? 'Plan'} · {intent === 'renew' ? 'Renewal' : 'New'} · seat{' '}
               <Text style={{ fontWeight: '900' }}>{seatCode ?? '—'}</Text>
-            </Text>
-            <Text style={{ color: c.ink600, fontSize: 13, lineHeight: 19, fontWeight: '500' }}>
-              Fill in your details below. You can upload Aadhaar or student ID here if you like—both are optional before you continue.
             </Text>
             {canGoToPayment && membershipStartDate ? (
               <Text style={{ color: c.ink500, fontSize: 12, fontWeight: '600', marginTop: 4 }}>
@@ -390,7 +513,7 @@ export default function StudentDocScreen() {
             />
             <Text style={{ color: c.ink500, fontSize: 12, fontWeight: '500' }}>
               {canGoToPayment
-                ? 'Your answers are kept on this device until payment succeeds, then they are saved to your library profile.'
+                ? 'The fields below are saved to your library profile only after payment succeeds. Documents upload to your account immediately (same as the website)—pull to refresh if you also use the site.'
                 : 'When you continue, we save these details to your library profile.'}
             </Text>
           </Card>
@@ -409,49 +532,89 @@ export default function StudentDocScreen() {
           </Card>
         ) : (
           <Fragment>
-            {TARGETS.map((t) => {
-              const d = byType.get(t.type);
-              const canUpload = showDocumentUploadButton(verificationStatus, d?.status);
-              return (
-                <Card key={t.type} style={{ padding: 16 }}>
-                  <View style={styles.row}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: c.ink900, fontSize: 15, fontWeight: '600' }}>{t.label}</Text>
-                      <Text style={{ color: c.ink600, fontSize: 12, fontWeight: '500', marginTop: 6 }}>
-                        Status: {loading ? 'Loading…' : badge(d?.status ?? 'not_uploaded')}
-                      </Text>
-                      {d?.status === 'rejected' && d.rejectionReason ? (
-                        <Text style={{ color: c.ink700, fontSize: 12, fontWeight: '500', marginTop: 6 }}>
-                          Reason: {d.rejectionReason}
-                        </Text>
-                      ) : null}
-                    </View>
+            {(memberKycSlots
+              ? SLOT_ROWS.map((row) => {
+                  const meta = memberKycSlots[row.key];
+                  const server = byType.get(row.uploadType);
+                  const effectiveStatus = mapMemberSlotToDocStatus(meta.memberStatus);
+                  const canUpload = showDocumentUploadButton(verificationStatus, effectiveStatus);
+                  const statusLabel = loading ? 'Loading…' : slotMemberStatusLabel(meta.memberStatus);
+                  const kycDocType: 'aadhaar_front' | 'aadhaar_back' | undefined =
+                    row.uploadType === 'aadhaar' && (row.key === 'aadhaar_front' || row.key === 'aadhaar_back')
+                      ? row.key
+                      : undefined;
+                  return (
+                    <Card key={row.key} style={{ padding: 16 }}>
+                      <View style={styles.row}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: c.ink900, fontSize: 15, fontWeight: '600' }}>{row.label}</Text>
+                          <Text style={{ color: c.ink600, fontSize: 12, fontWeight: '500', marginTop: 6 }}>
+                            Status: {statusLabel}
+                          </Text>
+                          {effectiveStatus === 'rejected' && server?.rejectionReason ? (
+                            <Text style={{ color: c.ink700, fontSize: 12, fontWeight: '500', marginTop: 6 }}>
+                              Reason: {server.rejectionReason}
+                            </Text>
+                          ) : null}
+                        </View>
 
-                    {canUpload ? (
-                      <Button
-                        title={uploading === t.type ? 'Uploading…' : 'Upload'}
-                        disabled={!token || uploading != null}
-                        onPress={() => void pickAndUpload(t.type)}
-                        style={{ alignSelf: 'flex-start', paddingHorizontal: 16 }}
-                      />
-                    ) : (
-                      <Text
-                        style={{
-                          alignSelf: 'center',
-                          color: c.ink500,
-                          fontSize: 13,
-                          fontWeight: '600',
-                          paddingVertical: 10,
-                          paddingHorizontal: 4,
-                        }}
-                      >
-                        {d?.status === 'verified' ? 'On file' : 'Uploads closed'}
-                      </Text>
-                    )}
-                  </View>
-                </Card>
-              );
-            })}
+                        {canUpload ? (
+                          <Button
+                            title={
+                              uploadingRow === row.key
+                                ? 'Uploading…'
+                                : effectiveStatus === 'pending'
+                                  ? 'Replace file'
+                                  : 'Upload'
+                            }
+                            disabled={!token || uploadingRow != null}
+                            onPress={() => void pickAndUpload({ rowKey: row.key, uploadType: row.uploadType, kycDocType })}
+                            style={{ alignSelf: 'flex-start', paddingHorizontal: 16 }}
+                          />
+                        ) : null}
+                      </View>
+                    </Card>
+                  );
+                })
+              : TARGETS.map((t) => {
+                  const server = byType.get(t.type);
+                  const display: DocumentState = server ?? { type: t.type, status: 'not_uploaded' };
+                  const canUpload = showDocumentUploadButton(verificationStatus, display.status);
+                  const statusLabel = loading ? 'Loading…' : badge(display.status);
+                  return (
+                    <Card key={t.type} style={{ padding: 16 }}>
+                      <View style={styles.row}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: c.ink900, fontSize: 15, fontWeight: '600' }}>{t.label}</Text>
+                          <Text style={{ color: c.ink600, fontSize: 12, fontWeight: '500', marginTop: 6 }}>
+                            Status: {statusLabel}
+                          </Text>
+                          {display.status === 'rejected' && server?.rejectionReason ? (
+                            <Text style={{ color: c.ink700, fontSize: 12, fontWeight: '500', marginTop: 6 }}>
+                              Reason: {server.rejectionReason}
+                            </Text>
+                          ) : null}
+                        </View>
+
+                        {canUpload ? (
+                          <Button
+                            title={
+                              uploadingRow === t.type
+                                ? 'Uploading…'
+                                : display.status === 'pending'
+                                  ? 'Replace file'
+                                  : 'Upload'
+                            }
+                            disabled={!token || uploadingRow != null}
+                            onPress={() => void pickAndUpload({ rowKey: t.type, uploadType: t.type })}
+                            style={{ alignSelf: 'flex-start', paddingHorizontal: 16 }}
+                          />
+                        ) : null}
+                      </View>
+                    </Card>
+                  );
+                })
+            )}
           </Fragment>
         )}
 

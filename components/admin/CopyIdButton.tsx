@@ -1,9 +1,15 @@
-import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text } from 'react-native';
 
+import {
+  CLARITY_CHIP_XS_RADIUS,
+  CLARITY_HINT,
+  CLARITY_METRIC_LABEL,
+  CLARITY_MONO_SM,
+} from '@/components/admin/clarityTokens';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
+import { copyToClipboard } from '@/lib/clipboard';
 
 type Props = {
   value: string;
@@ -20,16 +26,18 @@ export function CopyIdButton({ value, label = 'Copy', preview }: Props) {
     const v = value.trim();
     if (!v) return;
     try {
-      await Clipboard.setStringAsync(v);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      const ok = await copyToClipboard(v);
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
     } catch {
       Alert.alert('Copy failed', 'Could not copy to clipboard.');
     }
   }, [value]);
 
   if (!value.trim()) {
-    return <Text style={[styles.empty, { color: c.ink500 }]}>—</Text>;
+    return <Text style={[CLARITY_HINT, { color: c.ink500 }]}>—</Text>;
   }
 
   return (
@@ -39,27 +47,23 @@ export function CopyIdButton({ value, label = 'Copy', preview }: Props) {
       onPress={() => void copy()}
       style={({ pressed }) => [styles.wrap, pressed && { opacity: 0.85 }]}
     >
-      <Text style={[styles.preview, { color: c.ink800 }]} numberOfLines={1} selectable>
+      <Text style={[CLARITY_MONO_SM, { color: c.ink800 }]} numberOfLines={1} selectable>
         {preview ?? value}
       </Text>
-      <Text style={[styles.btn, { color: c.azure600, borderColor: c.border }]}>{copied ? 'Copied' : label}</Text>
+      <Text style={[CLARITY_METRIC_LABEL, styles.btn, { color: c.azure600, borderColor: c.border }]}>
+        {copied ? 'Copied' : label}
+      </Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { gap: 6, minWidth: 0 },
-  preview: { fontSize: 11, fontFamily: 'SpaceMono', fontWeight: '600' },
   btn: {
     alignSelf: 'flex-start',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 6,
+    borderRadius: CLARITY_CHIP_XS_RADIUS,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  empty: { fontSize: 13, fontWeight: '500' },
 });

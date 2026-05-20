@@ -23,8 +23,15 @@ export function clearDataCache(): void {
   store.clear();
 }
 
+export function invalidateDataCacheKey(key: string): void {
+  store.delete(key);
+}
+
 export const cacheKeys = {
   adminOverview: 'admin:overview',
   adminMembers: 'admin:members:list',
   adminPaymentsScreen: 'admin:payments:screen',
+  adminPendingKyc: 'admin:pending-kyc',
+  memberProfile: 'member:profile',
+  memberDocuments: 'member:documents',
 } as const;

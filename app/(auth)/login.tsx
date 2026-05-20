@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  AppState,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -10,27 +12,36 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Redirect, router } from 'expo-router';
 
+import { AuthMarketingPanel } from '@/components/auth/AuthMarketingPanel';
+import { AuthModeSegment, type AuthMode } from '@/components/auth/AuthModeSegment';
+import { AuthPasswordField } from '@/components/auth/AuthPasswordField';
+import { SignupVerificationPanel } from '@/components/auth/SignupVerificationPanel';
+import { StudentFieldError } from '@/components/student/StudentFieldError';
+import { BrandLogo } from '@/components/BrandLogo';
 import Colors from '@/constants/Colors';
+import { FONT_MONO, FONT_SANS } from '@/constants/Fonts';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { TextField } from '@/components/ui/TextField';
+import libraryInfo from '@/data/libraryInfo.json';
 import { api } from '@/lib/api';
 import { FIELD_LIMITS } from '@/lib/fieldLimits';
 import { formatPersonName } from '@/lib/formatPersonName';
-
-type AuthMode = 'signin' | 'signup';
+import { loadPendingSignup, savePendingSignup, startSignupEmailCooldown } from '@/lib/signupVerification';
+import { forgotPasswordUrl } from '@/lib/siteUrls';
 
 export default function LoginScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
-  const { auth, signIn, establishSession } = useAuth();
+  const { auth, signIn, establishSession, tryCompletePendingVerification } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>('signin');
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [pendingVerifyEmail, setPendingVerifyEmail] = useState('');
 
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [passwordOrOtp, setPasswordOrOtp] = useState('');
@@ -41,6 +52,36 @@ export default function LoginScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
+  const [signUpError, setSignUpError] = useState<string | null>(null);
+  const [showMarketing, setShowMarketing] = useState(false);
+
+  useEffect(() => {
+    void loadPendingSignup().then((pending) => {
+      if (!pending) return;
+      setPendingVerifyEmail(pending.email);
+      setVerificationSent(true);
+      setMode('signup');
+    });
+  }, []);
+
+  const pollVerified = useCallback(async () => {
+    if (!verificationSent) return;
+    await tryCompletePendingVerification();
+  }, [verificationSent, tryCompletePendingVerification]);
+
+  useEffect(() => {
+    if (!verificationSent) return;
+    void pollVerified();
+    const id = setInterval(() => void pollVerified(), 5000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void pollVerified();
+    });
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
+  }, [verificationSent, pollVerified]);
 
   const canSignIn = useMemo(
     () => emailOrPhone.trim().length > 3 && passwordOrOtp.length > 0,
@@ -61,6 +102,7 @@ export default function LoginScreen() {
 
   async function onSignUp() {
     if (!canSignUp) return;
+    setSignUpError(null);
     setSubmitting(true);
     try {
       const formattedName = formatPersonName(name);
@@ -76,40 +118,40 @@ export default function LoginScreen() {
         return;
       }
       if (res.needsEmailConfirmation) {
-        Alert.alert(
-          'Confirm your email',
-          'We sent a link to your inbox. After you confirm, use Sign in with the same email and password.',
-          [{ text: 'OK', onPress: () => setMode('signin') }],
-        );
+        const trimmedEmail = email.trim().toLowerCase();
+        await savePendingSignup({ email: trimmedEmail, password });
+        await startSignupEmailCooldown();
+        setPendingVerifyEmail(trimmedEmail);
+        setVerificationSent(true);
         return;
       }
       Alert.alert('Account created', 'You can sign in now with your email and password.', [
         { text: 'Sign in', onPress: () => setMode('signin') },
       ]);
     } catch (e: unknown) {
-      Alert.alert('Sign up failed', e instanceof Error ? e.message : 'Try again.');
+      setSignUpError(e instanceof Error ? e.message : 'Try again.');
     } finally {
       setSubmitting(false);
     }
   }
 
-  const heading = mode === 'signin' ? 'Welcome back' : 'Create account';
-  const sub =
-    mode === 'signin'
-      ? 'Sign in to manage membership, uploads, and your seat.'
-      : 'Students only — we will verify your details at the desk.';
+  function switchMode(next: AuthMode) {
+    setMode(next);
+    setSignInError(null);
+    setSignUpError(null);
+  }
+
+  const isSignIn = mode === 'signin';
+  const kicker = isSignIn ? 'Sign in' : 'Create account';
+  const kickerIcon = isSignIn ? 'lock' : 'user-plus';
+  const title = isSignIn ? 'Welcome back' : `Join ${libraryInfo.name}`;
+  const subtitle = isSignIn
+    ? `Sign in to your ${libraryInfo.name} account with the email and password you used at registration.`
+    : 'Sign up to get a member number, then sign in to pick plans, seats, and renewals.';
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: c.surfaceMuted }]} edges={['top', 'left', 'right']}>
-      <View style={styles.fill}>
-        <LinearGradient
-          colors={[c.azure50, c.surfaceMuted]}
-          start={{ x: 0.2, y: 0 }}
-          end={{ x: 0.9, y: 0.5 }}
-          style={StyleSheet.absoluteFillObject}
-          pointerEvents="none"
-        />
-        <KeyboardAvoidingView
+    <SafeAreaView style={[styles.safe, { backgroundColor: c.surface }]} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView
         style={styles.kav}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
@@ -119,282 +161,270 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.topBar}>
+          <View style={styles.header}>
+            <BrandLogo variant="full" height={36} />
             <Pressable
               onPress={() => router.replace('/(student)')}
-              hitSlop={12}
-              style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.65 : 1 }]}
+              hitSlop={10}
+              style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
               accessibilityRole="button"
               accessibilityLabel="Back to home"
             >
-              <FontAwesome name="angle-left" size={22} color={c.ink800} />
+              <Text style={[styles.backLink, { color: c.ink500 }]}>← Back to home</Text>
             </Pressable>
           </View>
 
-          <View style={styles.hero}>
-            <View style={[styles.mark, { backgroundColor: c.azure50, borderColor: c.azure100 }]}>
-              <FontAwesome name="book" size={20} color={c.azure600} />
+          <View style={styles.formBlock}>
+            <View style={styles.kickerRow}>
+              <FontAwesome name={kickerIcon} size={14} color={c.azure500} />
+              <Text style={[styles.kicker, { color: c.azure500 }]}>{kicker}</Text>
             </View>
-            <Text style={[styles.kicker, { color: c.azure600 }]}>Mani Library</Text>
-            <Text style={[styles.title, { color: c.ink900 }]}>{heading}</Text>
-            <Text style={[styles.subtitle, { color: c.ink600 }]}>{sub}</Text>
-          </View>
+            {!verificationSent ? (
+              <View style={styles.segmentWrap}>
+                <AuthModeSegment mode={mode} onChange={switchMode} />
+              </View>
+            ) : null}
+            <Text style={[styles.title, { color: c.ink900 }]}>{title}</Text>
+            <Text style={[styles.subtitle, { color: c.ink600 }]}>{subtitle}</Text>
 
-          <ModeSwitch mode={mode} onChange={setMode} />
-
-          <View style={[styles.sheet, { backgroundColor: c.surface, borderColor: c.border }]}>
-            {mode === 'signin' ? (
-              <>
-                <TextField
-                  label="Email"
-                  value={emailOrPhone}
-                  onChangeText={setEmailOrPhone}
-                  placeholder="you@email.com"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  maxLength={FIELD_LIMITS.emailMax}
-                />
-                <TextField
-                  label="Password"
-                  value={passwordOrOtp}
-                  onChangeText={setPasswordOrOtp}
-                  placeholder="••••••••"
-                  secureTextEntry
-                  autoCapitalize="none"
-                  maxLength={FIELD_LIMITS.passwordMax}
-                />
-
-                <Text style={[styles.hint, { color: c.ink500 }]}>
-                  Same account as the website. Staff access comes from your library profile (is_admin) — not from this
-                  screen.
-                </Text>
-
-                <View style={{ height: 4 }} />
-
-                <Button
-                  title={submitting ? 'Signing in…' : 'Sign in'}
-                  disabled={!canSignIn || submitting}
-                  onPress={async () => {
-                    setSubmitting(true);
-                    try {
-                      await signIn({ emailOrPhone, passwordOrOtp });
-                    } catch (e: unknown) {
-                      Alert.alert('Sign in failed', e instanceof Error ? e.message : 'Try again.');
-                    } finally {
-                      setSubmitting(false);
-                    }
+            {verificationSent ? (
+              <View style={styles.verifyWrap}>
+                <SignupVerificationPanel
+                  email={pendingVerifyEmail || email.trim().toLowerCase()}
+                  onSignInInstead={() => {
+                    setVerificationSent(false);
+                    setMode('signin');
                   }}
                 />
-              </>
+              </View>
             ) : (
-              <>
-                <TextField
-                  label="Full name"
-                  value={name}
-                  onChangeText={setName}
-                  onBlur={() => setName((v) => formatPersonName(v))}
-                  placeholder="Your name"
-                  autoCapitalize="words"
-                  maxLength={FIELD_LIMITS.nameMax}
-                />
-                <TextField
-                  label="Email"
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="you@email.com"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  maxLength={FIELD_LIMITS.emailMax}
-                />
-                <TextField
-                  label="Phone"
-                  value={phone}
-                  onChangeText={setPhone}
-                  placeholder="+91 ..."
-                  keyboardType="phone-pad"
-                  maxLength={FIELD_LIMITS.phoneMax}
-                />
-                <TextField
-                  label="Password"
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder={`Min. ${FIELD_LIMITS.passwordMin} characters`}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  maxLength={FIELD_LIMITS.passwordMax}
-                />
-                <TextField
-                  label="Confirm password"
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  placeholder="Repeat password"
-                  secureTextEntry
-                  autoCapitalize="none"
-                  maxLength={FIELD_LIMITS.passwordMax}
-                />
+              <View style={styles.fields}>
+                {isSignIn ? (
+                  <>
+                    <TextField
+                      variant="auth"
+                      label="Email"
+                      value={emailOrPhone}
+                      onChangeText={setEmailOrPhone}
+                      placeholder="you@email.com"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      maxLength={FIELD_LIMITS.emailMax}
+                    />
+                    <AuthPasswordField
+                      value={passwordOrOtp}
+                      onChangeText={(t) => {
+                        setPasswordOrOtp(t);
+                        if (signInError) setSignInError(null);
+                      }}
+                      maxLength={FIELD_LIMITS.passwordMax}
+                    />
+                    <Pressable
+                      onPress={() => void Linking.openURL(forgotPasswordUrl())}
+                      hitSlop={8}
+                      style={({ pressed }) => [styles.forgotRow, pressed ? { opacity: 0.7 } : null]}
+                      accessibilityRole="link"
+                      accessibilityLabel="Forgot password"
+                    >
+                      <Text style={[styles.forgotLink, { color: c.azure500 }]}>Forgot password?</Text>
+                    </Pressable>
+                    <StudentFieldError message={signInError} />
+                    <Button
+                      title={submitting ? 'Signing you in' : 'Sign in'}
+                      loading={submitting}
+                      disabled={!canSignIn}
+                      style={styles.pillBtn}
+                      onPress={async () => {
+                        setSignInError(null);
+                        setSubmitting(true);
+                        try {
+                          await signIn({ emailOrPhone, passwordOrOtp });
+                        } catch (e: unknown) {
+                          setSignInError(e instanceof Error ? e.message : 'Try again.');
+                        } finally {
+                          setSubmitting(false);
+                        }
+                      }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <TextField
+                      variant="auth"
+                      label="Full name"
+                      value={name}
+                      onChangeText={setName}
+                      onBlur={() => setName((v) => formatPersonName(v))}
+                      placeholder="Your name"
+                      autoCapitalize="words"
+                      maxLength={FIELD_LIMITS.nameMax}
+                    />
+                    <TextField
+                      variant="auth"
+                      label="Email"
+                      value={email}
+                      onChangeText={setEmail}
+                      placeholder="you@email.com"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      maxLength={FIELD_LIMITS.emailMax}
+                    />
+                    <TextField
+                      variant="auth"
+                      label="Phone"
+                      value={phone}
+                      onChangeText={setPhone}
+                      placeholder="+91 ..."
+                      keyboardType="phone-pad"
+                      maxLength={FIELD_LIMITS.phoneMax}
+                    />
+                    <AuthPasswordField
+                      value={password}
+                      onChangeText={setPassword}
+                      placeholder={`Min. ${FIELD_LIMITS.passwordMin} characters`}
+                      maxLength={FIELD_LIMITS.passwordMax}
+                    />
+                    <AuthPasswordField
+                      label="Confirm password"
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      placeholder="Repeat password"
+                      maxLength={FIELD_LIMITS.passwordMax}
+                    />
+                    <StudentFieldError message={signUpError} />
+                    <Button
+                      title={submitting ? 'Creating account' : 'Sign up'}
+                      loading={submitting}
+                      disabled={!canSignUp}
+                      style={styles.pillBtn}
+                      onPress={onSignUp}
+                    />
+                  </>
+                )}
 
-                <Button
-                  title={submitting ? 'Submitting…' : 'Request access'}
-                  disabled={!canSignUp || submitting}
-                  onPress={onSignUp}
-                />
-                <Text style={[styles.mutedNote, { color: c.ink500 }]}>
-                  Staff roles are set in the database on your profile, not here.
-                </Text>
-              </>
+              </View>
             )}
           </View>
 
-          <Button
-            title="Continue as guest"
-            variant="secondary"
-            onPress={() => router.replace('/(student)')}
-            style={{ marginTop: 4 }}
-          />
-          <Text style={[styles.guestFootnote, { color: c.ink500 }]}>
-            Guests only see the library brand page — no tab bar until you sign in.
-          </Text>
+          <View style={[styles.metaFoot, { borderTopColor: c.ink100 }]}>
+            <View style={styles.metaItem}>
+              <FontAwesome name="map-marker" size={12} color={c.ink400} />
+              <Text style={[styles.metaText, { color: c.ink400 }]}>
+                {libraryInfo.address.city}, {libraryInfo.address.state}
+              </Text>
+            </View>
+            <Text style={[styles.metaDot, { color: c.ink300 }]}>·</Text>
+            <View style={styles.metaItem}>
+              <FontAwesome name="clock-o" size={12} color={c.ink400} />
+              <Text style={[styles.metaText, { color: c.ink400 }]}>{libraryInfo.hours}</Text>
+            </View>
+          </View>
+
+          {!verificationSent ? (
+            <View style={styles.marketingWrap}>
+              <Pressable
+                onPress={() => setShowMarketing((v) => !v)}
+                style={({ pressed }) => [styles.marketingToggle, pressed ? { opacity: 0.75 } : null]}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: showMarketing }}
+              >
+                <Text style={[styles.marketingToggleText, { color: c.ink600 }]}>
+                  {showMarketing ? 'Hide' : 'Why join'} {libraryInfo.name}
+                </Text>
+                <FontAwesome name={showMarketing ? 'chevron-up' : 'chevron-down'} size={12} color={c.ink500} />
+              </Pressable>
+              {showMarketing ? <AuthMarketingPanel /> : null}
+            </View>
+          ) : null}
         </ScrollView>
-        </KeyboardAvoidingView>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function ModeSwitch({ mode, onChange }: { mode: AuthMode; onChange: (m: AuthMode) => void }) {
-  const scheme = useColorScheme() ?? 'light';
-  const c = Colors[scheme];
-
-  return (
-    <View style={[styles.segment, { backgroundColor: c.surfaceSunken, borderColor: c.border }]}>
-      <Pressable
-        onPress={() => onChange('signin')}
-        style={({ pressed }) => [
-          styles.segmentItem,
-          mode === 'signin' ? { backgroundColor: c.surface, ...segmentActiveShadow() } : null,
-          pressed && mode !== 'signin' ? { opacity: 0.88 } : null,
-        ]}
-      >
-        <Text style={[styles.segmentText, { color: mode === 'signin' ? c.ink900 : c.ink500 }]}>Sign in</Text>
-      </Pressable>
-      <Pressable
-        onPress={() => onChange('signup')}
-        style={({ pressed }) => [
-          styles.segmentItem,
-          mode === 'signup' ? { backgroundColor: c.surface, ...segmentActiveShadow() } : null,
-          pressed && mode !== 'signup' ? { opacity: 0.88 } : null,
-        ]}
-      >
-        <Text style={[styles.segmentText, { color: mode === 'signup' ? c.ink900 : c.ink500 }]}>Sign up</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function segmentActiveShadow() {
-  return {
-    shadowColor: '#101828',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  };
-}
-
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  fill: { flex: 1, position: 'relative' },
   kav: { flex: 1 },
   scrollContent: {
-    paddingHorizontal: 22,
-    paddingBottom: 36,
+    paddingHorizontal: 24,
+    paddingBottom: 32,
+    flexGrow: 1,
   },
-  topBar: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: 4,
     marginBottom: 8,
   },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: -8,
+  backLink: {
+    fontSize: 14,
+    fontFamily: FONT_SANS.regular,
   },
-  hero: {
-    marginTop: 8,
-    marginBottom: 22,
+  formBlock: {
+    paddingVertical: 20,
+    maxWidth: 440,
+    width: '100%',
+    alignSelf: 'center',
   },
-  mark: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
+  kickerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
+    gap: 6,
   },
   kicker: {
+    fontFamily: FONT_MONO.regular,
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 2,
     textTransform: 'uppercase',
-    marginBottom: 6,
   },
   title: {
-    fontSize: 30,
-    fontWeight: '600',
-    letterSpacing: -0.6,
-    lineHeight: 36,
+    marginTop: 12,
+    fontSize: 28,
+    fontFamily: FONT_SANS.semibold,
+    letterSpacing: -0.5,
+    lineHeight: 34,
   },
   subtitle: {
-    marginTop: 10,
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '500',
-    maxWidth: 340,
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 21,
+    fontFamily: FONT_SANS.regular,
   },
-  segment: {
+  segmentWrap: { marginTop: 16 },
+  verifyWrap: { marginTop: 24 },
+  fields: { marginTop: 20, gap: 16 },
+  pillBtn: {
+    marginTop: 8,
+    borderRadius: 999,
+    paddingVertical: 14,
+  },
+  forgotRow: { alignSelf: 'flex-end', marginTop: -4 },
+  forgotLink: { fontSize: 13, fontFamily: FONT_SANS.semibold },
+  marketingWrap: { marginTop: 8, gap: 12 },
+  marketingToggle: {
     flexDirection: 'row',
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 4,
-    gap: 4,
-    marginBottom: 18,
-  },
-  segmentItem: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
   },
-  segmentText: { fontSize: 14, fontWeight: '600' },
-  sheet: {
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 20,
-    gap: 12,
+  marketingToggleText: { fontSize: 14, fontFamily: FONT_SANS.medium },
+  metaFoot: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  hint: {
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
-    marginTop: -4,
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  metaText: {
+    fontFamily: FONT_MONO.regular,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
-  mutedNote: {
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
-    marginTop: 4,
-  },
-  guestFootnote: {
-    marginTop: 10,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
-    textAlign: 'center',
-    paddingHorizontal: 8,
-  },
+  metaDot: { fontSize: 10 },
 });

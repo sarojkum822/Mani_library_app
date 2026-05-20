@@ -6,6 +6,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 import { displayPersonName } from '@/lib/formatPersonName';
+import type { KycDocType, MemberKycSlotSummary } from '@/lib/kycMemberSlots';
 import { tryMemberProfileFromSupabase } from '@/lib/memberProfileSupabase';
 import type { Role } from '@/lib/storage';
 
@@ -26,6 +27,8 @@ export type ApiUser = {
   deviceUserId?: number;
 };
 
+export type MemberKycSlots = Record<KycDocType, MemberKycSlotSummary>;
+
 /** Same fields as web dashboard “Your profile” + intake extras (from `GET /api/me/member-profile`). */
 export type MemberProfile = {
   id: string;
@@ -39,6 +42,23 @@ export type MemberProfile = {
   avatarUrl: string | null;
   /** Raw UI status: `approved` | `pending` | `rejected` | `resubmit` | `none` */
   verificationStatus: string;
+  /**
+   * Which KYC files exist on the latest verification row (`submitted` or `checkout_pending`).
+   * Omitted when the API does not send this field (legacy — document rows fall back to coarse mapping).
+   */
+  kycDocUploaded?: {
+    aadhaarFront: boolean;
+    aadhaarBack: boolean;
+    studentId: boolean;
+  };
+  /** Display filenames for active KYC slots (null = none). */
+  kycDocOriginalNames?: {
+    aadhaarFront: string | null;
+    aadhaarBack: string | null;
+    studentId: string | null;
+  };
+  /** Per-slot filename + member-facing status (matches website Profile & KYC). */
+  memberKycSlots?: MemberKycSlots;
   aadhaarLastFour: string | null;
   studentRollNumber: string | null;
   institutionType: string | null;
@@ -139,12 +159,15 @@ export type DocumentState = {
   status: DocumentStatus;
   updatedAt?: string; // ISO
   rejectionReason?: string;
+  /** Server-reported label for the current file (member profile `kycDocOriginalNames`). */
+  uploadedFileName?: string | null;
 };
 
 /** Result of `api.documents` — includes raw status so the Doc screen can hide Upload when the API rejects new files. */
 export type MemberDocumentsPayload = {
   items: DocumentState[];
   verificationStatus: string;
+  memberKycSlots?: MemberKycSlots;
 };
 
 export type PendingDoc = {
@@ -227,7 +250,8 @@ export function invalidateMemberAccountCache(): void {
     if (
       key.includes('/api/memberships/me-active') ||
       key.includes('/api/payments/me') ||
-      key.includes('/api/me/member-profile')
+      key.includes('/api/me/member-profile') ||
+      key.includes('/api/auth/me')
     ) {
       getResponseCache.delete(key);
     }
@@ -262,6 +286,10 @@ function resolveApiBaseUrl(): string {
 const RESOLVED_BASE_URL = resolveApiBaseUrl();
 
 /** Safe label for UI (e.g. admin screens) — does not throw if env is missing. */
+export function apiSiteOrigin(): string {
+  return assertBaseUrl();
+}
+
 export function apiPublicBaseHostLabel(): string {
   if (!RESOLVED_BASE_URL) return 'not configured';
   try {
@@ -371,6 +399,57 @@ async function request<T>(path: string, opts: { method?: string; token?: string;
   return parsed;
 }
 
+function pickKycDocOriginalNames(j: Record<string, unknown>): MemberProfile['kycDocOriginalNames'] {
+  if (!('kycDocOriginalNames' in j)) return undefined;
+  const o = j.kycDocOriginalNames;
+  if (!o || typeof o !== 'object') return undefined;
+  const r = o as Record<string, unknown>;
+  const s = (x: unknown) => (typeof x === 'string' && x.trim() ? x.trim() : null);
+  return {
+    aadhaarFront: s(r.aadhaarFront),
+    aadhaarBack: s(r.aadhaarBack),
+    studentId: s(r.studentId),
+  };
+}
+
+function pickKycDocUploaded(j: Record<string, unknown>): MemberProfile['kycDocUploaded'] {
+  if (!('kycDocUploaded' in j)) return undefined;
+  const o = j.kycDocUploaded;
+  if (!o || typeof o !== 'object') return undefined;
+  const r = o as Record<string, unknown>;
+  return {
+    aadhaarFront: r.aadhaarFront === true,
+    aadhaarBack: r.aadhaarBack === true,
+    studentId: r.studentId === true,
+  };
+}
+
+function pickOneMemberKycSlot(raw: unknown): MemberKycSlotSummary | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const ms = r.memberStatus;
+  if (ms !== 'not_uploaded' && ms !== 'pending_review' && ms !== 'verified' && ms !== 'queued_checkout') {
+    return null;
+  }
+  const fn = r.fileName;
+  return {
+    fileName: typeof fn === 'string' && fn.trim() ? fn.trim() : null,
+    memberStatus: ms,
+  };
+}
+
+function pickMemberKycSlots(j: Record<string, unknown>): MemberKycSlots | undefined {
+  if (!('memberKycSlots' in j)) return undefined;
+  const raw = j.memberKycSlots;
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const a = pickOneMemberKycSlot(r.aadhaar_front);
+  const b = pickOneMemberKycSlot(r.aadhaar_back);
+  const s = pickOneMemberKycSlot(r.student_id);
+  if (!a || !b || !s) return undefined;
+  return { aadhaar_front: a, aadhaar_back: b, student_id: s };
+}
+
 function pickMemberProfile(j: Record<string, unknown>): MemberProfile {
   const role: Role = j.role === 'admin' ? 'admin' : 'student';
   const duParsed =
@@ -390,6 +469,9 @@ function pickMemberProfile(j: Record<string, unknown>): MemberProfile {
     libraryNumber,
     avatarUrl: typeof j.avatarUrl === 'string' ? j.avatarUrl : null,
     verificationStatus: typeof j.verificationStatus === 'string' ? j.verificationStatus : 'none',
+    kycDocUploaded: pickKycDocUploaded(j),
+    kycDocOriginalNames: pickKycDocOriginalNames(j),
+    memberKycSlots: pickMemberKycSlots(j),
     aadhaarLastFour: j.aadhaarLastFour === null || typeof j.aadhaarLastFour === 'string' ? (j.aadhaarLastFour as string | null) : null,
     studentRollNumber:
       j.studentRollNumber === null || typeof j.studentRollNumber === 'string'
@@ -704,6 +786,7 @@ export type RazorpayCreateOrderResponse = {
   currency: string;
   paymentId: string;
   membershipId: string;
+  hostedCheckoutUrl?: string;
 };
 
 function documentsFromVerificationStatus(vRaw: string): DocumentState[] {
@@ -726,6 +809,63 @@ function documentsFromVerificationStatus(vRaw: string): DocumentState[] {
   return [
     { type: 'aadhaar', status: aad },
     { type: 'student_id', status: stu },
+  ];
+}
+
+/** Per-slot document row when `kycDocUploaded` is present on member profile (matches website dashboard). */
+function documentItemsFromVerificationAndSlots(
+  vRaw: string,
+  slots: MemberProfile['kycDocUploaded'],
+  names?: MemberProfile['kycDocOriginalNames'],
+): DocumentState[] {
+  if (!slots) return documentsFromVerificationStatus(vRaw);
+  const v = (vRaw || 'none').toLowerCase();
+  const aUp = slots.aadhaarFront || slots.aadhaarBack;
+  const sUp = slots.studentId;
+  const uploadedOrMissing = (up: boolean): DocumentStatus => (up ? 'pending' : 'not_uploaded');
+  const aadLabel =
+    names && (names.aadhaarFront || names.aadhaarBack)
+      ? [names.aadhaarFront, names.aadhaarBack].filter(Boolean).join(' · ')
+      : null;
+  const stuLabel = names?.studentId ?? null;
+
+  if (v === 'approved') {
+    return [
+      { type: 'aadhaar', status: 'verified', uploadedFileName: aadLabel },
+      { type: 'student_id', status: 'verified', uploadedFileName: stuLabel },
+    ];
+  }
+  if (v === 'rejected') {
+    return [
+      { type: 'aadhaar', status: 'rejected', uploadedFileName: aadLabel },
+      { type: 'student_id', status: 'rejected', uploadedFileName: stuLabel },
+    ];
+  }
+  if (v === 'resubmit') {
+    return [
+      {
+        type: 'aadhaar',
+        status: aUp ? 'pending' : 'rejected',
+        uploadedFileName: aUp ? aadLabel : undefined,
+      },
+      {
+        type: 'student_id',
+        status: uploadedOrMissing(sUp),
+        uploadedFileName: sUp ? stuLabel : undefined,
+      },
+    ];
+  }
+  return [
+    {
+      type: 'aadhaar',
+      status: uploadedOrMissing(aUp),
+      uploadedFileName: aUp ? aadLabel : undefined,
+    },
+    {
+      type: 'student_id',
+      status: uploadedOrMissing(sUp),
+      uploadedFileName: sUp ? stuLabel : undefined,
+    },
   ];
 }
 
@@ -757,6 +897,18 @@ export const api = {
         phone: req.phone.trim(),
         password: req.password,
         client: 'expo',
+        origin: apiSiteOrigin(),
+      },
+    });
+  },
+
+  async resendVerificationEmail(email: string): Promise<void> {
+    await request('/api/auth/resend-verification', {
+      method: 'POST',
+      body: {
+        email: email.trim().toLowerCase(),
+        client: 'expo',
+        origin: apiSiteOrigin(),
       },
     });
   },
@@ -799,21 +951,46 @@ export const api = {
     }
 
     let profile = pickMemberProfile(raw);
-    /* `me-active` loads `profiles.device_user_id` with the service role — use it when the
-     * profile envelope or Supabase client path omits the id (common with older API deploys). */
-    if (profile.deviceUserId == null) {
-      try {
-        const ma = await request<Record<string, unknown> & { device_user_id?: unknown }>(
-          '/api/memberships/me-active',
-          { token },
-        );
-        const n = parseDeviceUserIdNumber(ma.device_user_id);
-        if (n !== undefined) {
-          profile = { ...profile, deviceUserId: n, libraryNumber: formatDeviceUserIdLabel(n) };
+    const v = (profile.verificationStatus || 'none').toLowerCase();
+    const verifiedAccount = v === 'approved' || profile.kycDocUploaded?.aadhaarFront || profile.kycDocUploaded?.studentId;
+    const slotsAllEmpty =
+      profile.memberKycSlots &&
+      (['aadhaar_front', 'aadhaar_back', 'student_id'] as const).every(
+        (k) => profile.memberKycSlots![k].memberStatus === 'not_uploaded',
+      );
+    const [kycEnriched, deviceFromActive] = await Promise.all([
+      (async (): Promise<MemberProfile | null> => {
+        if (!fromSb || !verifiedAccount || !slotsAllEmpty) return null;
+        try {
+          const apiRaw = await request<Record<string, unknown>>('/api/me/member-profile', { token });
+          return pickMemberProfile(apiRaw);
+        } catch {
+          try {
+            const apiRaw = await request<Record<string, unknown>>('/api/auth/me', { token });
+            return pickMemberProfile(apiRaw);
+          } catch {
+            return null;
+          }
         }
-      } catch {
-        /* ignore */
-      }
+      })(),
+      (async (): Promise<{ deviceUserId: number; libraryNumber: string } | null> => {
+        if (profile.deviceUserId != null) return null;
+        try {
+          const ma = await request<Record<string, unknown> & { device_user_id?: unknown }>(
+            '/api/memberships/me-active',
+            { token },
+          );
+          const n = parseDeviceUserIdNumber(ma.device_user_id);
+          if (n === undefined) return null;
+          return { deviceUserId: n, libraryNumber: formatDeviceUserIdLabel(n) };
+        } catch {
+          return null;
+        }
+      })(),
+    ]);
+    if (kycEnriched) profile = kycEnriched;
+    if (deviceFromActive) {
+      profile = { ...profile, deviceUserId: deviceFromActive.deviceUserId, libraryNumber: deviceFromActive.libraryNumber };
     }
     return profile;
   },
@@ -908,9 +1085,20 @@ export const api = {
     return { ...base, renewPlanEligible };
   },
 
-  /** Quick renew from the app is not wired to Razorpay yet; complete renewal on the website. */
+  /** Opens website membership flow in the device browser (Razorpay web checkout). */
   async renewMembership(_token: string): Promise<{ ok: true; paymentUrl?: string }> {
-    return { ok: true };
+    const base = assertBaseUrl();
+    return { ok: true, paymentUrl: `${base}/membership/long-term` };
+  },
+
+  async reconcileRazorpayPayment(token: string, razorpay_payment_id: string): Promise<{ ok: boolean }> {
+    const j = await request<{ ok?: boolean; error?: string; hint?: string }>('/api/payments/razorpay/reconcile', {
+      method: 'POST',
+      token,
+      body: { razorpay_payment_id: razorpay_payment_id.trim() },
+    });
+    invalidateMemberAccountCache();
+    return { ok: j.ok === true };
   },
 
   async membershipHistory(token: string): Promise<MembershipHistoryEntry[]> {
@@ -946,43 +1134,106 @@ export const api = {
     const prof = await api.memberProfile(token);
     const verificationStatus = typeof prof.verificationStatus === 'string' ? prof.verificationStatus : 'none';
     return {
-      items: documentsFromVerificationStatus(verificationStatus),
+      items: documentItemsFromVerificationAndSlots(verificationStatus, prof.kycDocUploaded, prof.kycDocOriginalNames),
       verificationStatus,
+      memberKycSlots: prof.memberKycSlots,
     };
   },
 
   async uploadDocument(
     token: string,
-    args: { type: DocumentType; fileName: string; mimeType: string; base64: string },
+    args: {
+      type: DocumentType;
+      /** When `type` is `aadhaar`, upload front vs back (default front). */
+      kycDocType?: 'aadhaar_front' | 'aadhaar_back';
+      fileUri: string;
+      fileName: string;
+      mimeType: string;
+      deleteAfterUpload?: boolean;
+    },
   ): Promise<{ ok: true }> {
-    const { cacheDirectory, writeAsStringAsync, deleteAsync, EncodingType } = await import('expo-file-system/legacy');
+    const { deleteAsync } = await import('expo-file-system/legacy');
     const base = assertBaseUrl();
-    const docType = args.type === 'aadhaar' ? 'aadhaar_front' : 'student_id';
-    const ext = args.mimeType.includes('png') ? 'png' : args.mimeType.includes('webp') ? 'webp' : 'jpg';
-    const dir = cacheDirectory ?? '';
-    const cacheUri = `${dir}kyc_${Date.now()}.${ext}`;
-    await writeAsStringAsync(cacheUri, args.base64, {
-      encoding: EncodingType.Base64,
-    });
+    const docType =
+      args.type === 'student_id'
+        ? 'student_id'
+        : args.kycDocType === 'aadhaar_back'
+          ? 'aadhaar_back'
+          : 'aadhaar_front';
     const form = new FormData();
     form.append('docType', docType);
+    form.append('fileName', args.fileName);
     form.append('file', {
-      uri: cacheUri,
-      name: args.fileName || `upload.${ext}`,
+      uri: args.fileUri,
+      name: args.fileName,
       type: args.mimeType,
     } as unknown as Blob);
-    const res = await fetch(`${base}/api/me/verification/document`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'X-App-Client': 'expo',
-        Authorization: `Bearer ${token}`,
-      },
-      body: form,
-    });
-    await parseJsonResponse<Record<string, unknown>>(res);
-    void deleteAsync(cacheUri, { idempotent: true }).catch(() => {});
-    return { ok: true };
+    try {
+      const res = await fetch(`${base}/api/me/verification/document`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'X-App-Client': 'expo',
+          Authorization: `Bearer ${token}`,
+        },
+        body: form,
+      });
+      await parseJsonResponse<Record<string, unknown>>(res);
+      invalidateMemberAccountCache();
+      return { ok: true };
+    } finally {
+      if (args.deleteAfterUpload) {
+        void deleteAsync(args.fileUri, { idempotent: true }).catch(() => {});
+      }
+    }
+  },
+
+  /** Stages KYC under `checkout_pending` until membership payment succeeds (not `submitted` / staff review). */
+  async uploadDocumentCheckoutPending(
+    token: string,
+    args: {
+      type: DocumentType;
+      kycDocType?: 'aadhaar_front' | 'aadhaar_back';
+      fileUri: string;
+      fileName: string;
+      mimeType: string;
+      deleteAfterUpload?: boolean;
+    },
+  ): Promise<{ ok: true }> {
+    const { deleteAsync } = await import('expo-file-system/legacy');
+    const base = assertBaseUrl();
+    const docType =
+      args.type === 'student_id'
+        ? 'student_id'
+        : args.kycDocType === 'aadhaar_back'
+          ? 'aadhaar_back'
+          : 'aadhaar_front';
+    const form = new FormData();
+    form.append('docType', docType);
+    form.append('fileName', args.fileName);
+    form.append('file', {
+      uri: args.fileUri,
+      name: args.fileName,
+      type: args.mimeType,
+    } as unknown as Blob);
+    try {
+      const res = await fetch(`${base}/api/me/verification/document-checkout-pending`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'X-App-Client': 'expo',
+          Authorization: `Bearer ${token}`,
+        },
+        body: form,
+      });
+      await parseJsonResponse<Record<string, unknown>>(res);
+      invalidateMemberAccountCache();
+      return { ok: true };
+    } finally {
+      if (args.deleteAfterUpload) {
+        void deleteAsync(args.fileUri, { idempotent: true }).catch(() => {});
+      }
+    }
   },
 
   async seatOccupancy(
@@ -1022,6 +1273,10 @@ export const api = {
       currency: String(j.currency ?? 'INR'),
       paymentId: String(j.paymentId ?? ''),
       membershipId: String(j.membershipId ?? ''),
+      hostedCheckoutUrl:
+        typeof j.hostedCheckoutUrl === 'string' && j.hostedCheckoutUrl.trim()
+          ? j.hostedCheckoutUrl.trim()
+          : undefined,
     };
   },
 
@@ -1042,14 +1297,6 @@ export const api = {
     return { alreadyPaid: j.alreadyPaid === true };
   },
 
-  async reconcileRazorpayPayment(token: string, razorpay_payment_id: string): Promise<void> {
-    await request('/api/payments/razorpay/reconcile', {
-      method: 'POST',
-      token,
-      body: { razorpay_payment_id },
-    });
-  },
-
   async abandonRazorpayCheckout(token: string, payment_id: string): Promise<void> {
     await request('/api/payments/razorpay/abandon-pending-checkout', {
       method: 'POST',
@@ -1067,6 +1314,23 @@ export const api = {
       token,
       body: args,
     });
+  },
+
+  /** Poll Razorpay order + DB (after verify/reconcile or webhook delay). */
+  async syncPendingRazorpayPayment(
+    token: string,
+    payment_id: string,
+  ): Promise<{ outcome: string; paymentId: string; alreadyPaid?: boolean }> {
+    const j = await request<Record<string, unknown>>('/api/payments/razorpay/sync-pending', {
+      method: 'POST',
+      token,
+      body: { payment_id },
+    });
+    return {
+      outcome: String(j.outcome ?? 'still_pending'),
+      paymentId: String(j.paymentId ?? payment_id),
+      alreadyPaid: j.alreadyPaid === true,
+    };
   },
 
   async adminDailyAttendance(

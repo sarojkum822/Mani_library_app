@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import {
   adminCardChrome,
   CLARITY_CARD_PADDING,
+  CLARITY_HINT,
   CLARITY_KPI_VALUE,
   CLARITY_METRIC_LABEL,
   useAdminPalette,
@@ -32,7 +33,7 @@ export function AdminMetricTile({ label, value, hint, tone = 'neutral' }: Props)
     <View style={[styles.card, chrome]}>
       <Text style={[CLARITY_METRIC_LABEL, { color: c.ink500 }]}>{label}</Text>
       <Text style={[styles.value, CLARITY_KPI_VALUE, { color: c.ink900 }]}>{value}</Text>
-      {hint ? <Text style={[styles.hint, { color: c.ink500 }]}>{hint}</Text> : null}
+      {hint ? <Text style={[CLARITY_HINT, styles.hintGap, { color: c.ink500 }]}>{hint}</Text> : null}
     </View>
   );
 }
@@ -40,5 +41,5 @@ export function AdminMetricTile({ label, value, hint, tone = 'neutral' }: Props)
 const styles = StyleSheet.create({
   card: { padding: CLARITY_CARD_PADDING },
   value: { marginTop: 10 },
-  hint: { marginTop: 8, fontSize: 12, fontWeight: '400', lineHeight: 16 },
+  hintGap: { marginTop: 8 },
 });

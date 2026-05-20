@@ -1,16 +1,11 @@
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  View,
-} from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AdminAvatar } from '@/components/admin/AdminAvatar';
 import { AdminListRow } from '@/components/admin/AdminListRow';
+import { AdminListSkeleton } from '@/components/admin/AdminListSkeleton';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { AdminSearchField } from '@/components/admin/AdminSearchField';
 import { adminCardChrome } from '@/components/admin/clarityTokens';
@@ -19,12 +14,11 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { MembershipStatusBadge } from '@/components/admin/MembershipStatusBadge';
+import { useStaleWhileRevalidate } from '@/hooks/useStaleWhileRevalidate';
 import { DEVICE_USER_ID_SEARCH_PLACEHOLDER, deviceUserIdInlineLabel } from '@/lib/deviceUserIdLabel';
 import { api } from '@/lib/api';
-import {
-  membershipPlanKindLabel,
-  type Member,
-} from '@/lib/members';
+import { cacheKeys } from '@/lib/dataCache';
+import { membershipPlanKindLabel, type Member } from '@/lib/members';
 
 export default function AdminSearchScreen() {
   const scheme = useColorScheme() ?? 'light';
@@ -33,28 +27,23 @@ export default function AdminSearchScreen() {
   const { auth } = useAuth();
   const token = auth.status === 'signed_in' ? auth.token : null;
 
-  const [all, setAll] = useState<Member[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [q, setQ] = useState('');
 
-  const load = useCallback(async () => {
-    if (!token) {
-      setAll([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      setAll(await api.adminMembersList(token));
-    } catch {
-      setAll([]);
-    } finally {
-      setLoading(false);
-    }
+  const fetchMembers = useCallback(async () => {
+    if (!token) throw new Error('Sign in as admin to load members.');
+    return api.adminMembersList(token);
   }, [token]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { data, loading, revalidating } = useStaleWhileRevalidate<Member[]>({
+    cacheKey: cacheKeys.adminMembers,
+    fetcher: fetchMembers,
+    refreshKey,
+    enabled: !!token,
+  });
+
+  const all = data ?? [];
+  const listLoading = loading && all.length === 0;
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -76,7 +65,13 @@ export default function AdminSearchScreen() {
         data={filtered}
         keyExtractor={(m) => m.listKey}
         keyboardShouldPersistTaps="handled"
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={c.azure500} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={revalidating}
+            onRefresh={() => setRefreshKey((k) => k + 1)}
+            tintColor={c.azure500}
+          />
+        }
         contentContainerStyle={[adminScrollContentInsets(insets.bottom, 12), { flexGrow: 1 }]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
@@ -93,7 +88,7 @@ export default function AdminSearchScreen() {
               autoFocus
               autoCapitalize="none"
             />
-            {loading && all.length === 0 ? <ActivityIndicator color={c.azure500} style={{ marginTop: 8 }} /> : null}
+            {listLoading ? <AdminListSkeleton rows={6} /> : null}
           </View>
         }
         renderItem={({ item }) => (

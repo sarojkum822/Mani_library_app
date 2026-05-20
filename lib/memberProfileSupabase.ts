@@ -9,17 +9,14 @@
 import { createClient } from '@supabase/supabase-js';
 
 import { displayPersonName } from '@/lib/formatPersonName';
-
-type KycDocType = 'aadhaar_front' | 'aadhaar_back' | 'student_id';
-type DocPhase = 'checkout_pending' | 'submitted';
-
-type VerificationDocItem = {
-  doc_type: KycDocType;
-  storage_bucket: string;
-  storage_path: string;
-  content_type: string;
-  phase: DocPhase;
-};
+import { getSupabasePublicConfig } from '@/lib/supabaseConfig';
+import {
+  buildMemberKycSlotSummaries,
+  kycDisplayFileName,
+  mergeVerificationDocsForMember,
+  type KycDocType,
+  type VerificationDocItem,
+} from '@/lib/kycMemberSlots';
 
 type VerRow = { id: string; status: string };
 
@@ -40,6 +37,30 @@ function extrasToDisplayFields(extras: unknown): {
 
 function hasSubmittedKycDocs(docs: VerificationDocItem[]): boolean {
   return docs.some((d) => d.phase === 'submitted');
+}
+
+function kycDocUploadedSlots(docs: VerificationDocItem[]) {
+  const has = (dt: KycDocType) =>
+    docs.some((d) => d.doc_type === dt && (d.phase === 'checkout_pending' || d.phase === 'submitted'));
+  return {
+    aadhaarFront: has('aadhaar_front'),
+    aadhaarBack: has('aadhaar_back'),
+    studentId: has('student_id'),
+  };
+}
+
+function kycOriginalNamesFromLocalDocs(docs: VerificationDocItem[]) {
+  const pick = (dt: KycDocType): string | null => {
+    const d = docs.find(
+      (x) => x.doc_type === dt && (x.phase === 'checkout_pending' || x.phase === 'submitted'),
+    );
+    return d ? kycDisplayFileName(d) : null;
+  };
+  return {
+    aadhaarFront: pick('aadhaar_front'),
+    aadhaarBack: pick('aadhaar_back'),
+    studentId: pick('student_id'),
+  };
 }
 
 /** Same rules as `manilibrary` `deriveUiVerificationStatus`. */
@@ -89,20 +110,12 @@ function jwtSub(accessToken: string): string | null {
   }
 }
 
-function supabaseUrlKey(): { url: string; anon: string } | null {
-  const url = typeof process.env.EXPO_PUBLIC_SUPABASE_URL === 'string' ? process.env.EXPO_PUBLIC_SUPABASE_URL.trim() : '';
-  const anon =
-    typeof process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY === 'string' ? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY.trim() : '';
-  if (!url || !anon) return null;
-  return { url, anon };
-}
-
 /**
  * Returns a JSON-shaped object compatible with `pickMemberProfile` in `api.ts`, or `null` if
  * Supabase is not configured, JWT has no `sub`, or the read fails (RLS / network).
  */
 export async function tryMemberProfileFromSupabase(accessToken: string): Promise<Record<string, unknown> | null> {
-  const cfg = supabaseUrlKey();
+  const cfg = getSupabasePublicConfig();
   const uid = jwtSub(accessToken);
   if (!cfg || !uid) return null;
 
@@ -120,28 +133,67 @@ export async function tryMemberProfileFromSupabase(accessToken: string): Promise
 
   if (pe || !prof) return null;
 
-  const { data: latestRow } = await sb
-    .from('verification')
-    .select('id, status')
-    .eq('user_id', uid)
-    .is('deleted_at', null)
-    .order('submitted_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [{ data: latestRow, error: latestVerErr }, { data: openRow, error: openVerErr }] = await Promise.all([
+    sb
+      .from('verification')
+      .select('id, status')
+      .eq('user_id', uid)
+      .is('deleted_at', null)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    sb
+      .from('verification')
+      .select('id, status')
+      .eq('user_id', uid)
+      .in('status', ['pending', 'resubmit'])
+      .is('deleted_at', null)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
-  const latestDocs: VerificationDocItem[] = [];
-  const row = latestRow as VerRow | null;
-  if (row?.id) {
-    const { data: docRows, error: de } = await sb
+  const latestR = (latestVerErr ? null : latestRow) as VerRow | null;
+  const openR =
+    openVerErr || !openRow || typeof (openRow as { id?: unknown }).id !== 'string'
+      ? null
+      : (openRow as VerRow);
+  const orderedIds = [...new Set([openR?.id, latestR?.id].filter((x): x is string => typeof x === 'string' && x.length > 0))];
+
+  const docMap = new Map<string, VerificationDocItem[]>();
+  for (const id of orderedIds) docMap.set(id, []);
+
+  if (orderedIds.length > 0) {
+    const full =
+      'verification_id, doc_type, phase, storage_bucket, storage_path, content_type, original_filename';
+    const min = 'verification_id, doc_type, phase, storage_bucket, storage_path, content_type';
+    const rFull = await sb
       .from('verification_documents')
-      .select('doc_type, phase, storage_bucket, storage_path, content_type')
-      .eq('verification_id', row.id)
-      .is('deleted_at', null);
-    if (!de) {
-      for (const r of docRows ?? []) {
+      .select(full)
+      .in('verification_id', orderedIds)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    let docRows: unknown[] | null = (rFull.data as unknown[] | null) ?? null;
+    let de = rFull.error;
+    if (de && /original_filename|does not exist/i.test(de.message)) {
+      const rMin = await sb
+        .from('verification_documents')
+        .select(min)
+        .in('verification_id', orderedIds)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+      docRows = (rMin.data as unknown[] | null) ?? null;
+      de = rMin.error;
+    }
+    if (!de && docRows) {
+      for (const r of docRows) {
         const o = r as Record<string, unknown>;
+        const vid = String(o.verification_id ?? '');
+        const bucket = docMap.get(vid);
+        if (!bucket) continue;
         const docType = o.doc_type;
         const phase = o.phase;
+        const ofn = o.original_filename;
         if (
           typeof docType === 'string' &&
           (docType === 'aadhaar_front' || docType === 'aadhaar_back' || docType === 'student_id') &&
@@ -150,25 +202,32 @@ export async function tryMemberProfileFromSupabase(accessToken: string): Promise
           typeof o.storage_path === 'string' &&
           typeof o.content_type === 'string'
         ) {
-          latestDocs.push({
+          bucket.push({
             doc_type: docType as KycDocType,
             storage_bucket: o.storage_bucket,
             storage_path: o.storage_path,
             content_type: o.content_type,
             phase,
+            original_filename: typeof ofn === 'string' && ofn.trim() ? ofn.trim().slice(0, 200) : null,
           });
         }
       }
     }
   }
 
+  const mergedDocs = mergeVerificationDocsForMember(orderedIds, docMap);
+
   const x = extrasToDisplayFields((prof as { profile_extras?: unknown }).profile_extras);
-  const rowForUi: Pick<VerRow, 'status'> | null = row ? { status: String(row.status ?? 'none') } : null;
+  const statusSource = openR ?? latestR;
+  const rowForUi: Pick<VerRow, 'status'> | null = statusSource ? { status: String(statusSource.status ?? 'none') } : null;
   const verificationStatus = deriveUiVerificationStatus(
     (prof as { is_verified?: boolean }).is_verified === true,
     rowForUi,
-    latestDocs,
+    mergedDocs,
   );
+
+  const isVerifiedProf = (prof as { is_verified?: boolean }).is_verified === true;
+  const memberKycSlots = buildMemberKycSlotSummaries(isVerifiedProf, verificationStatus, mergedDocs);
 
   const isStaff =
     (prof as { is_admin?: boolean }).is_admin === true ||
@@ -187,6 +246,9 @@ export async function tryMemberProfileFromSupabase(accessToken: string): Promise
     libraryNumber,
     avatarUrl: ((prof as { avatar_url?: string | null }).avatar_url as string | null) ?? null,
     verificationStatus,
+    kycDocUploaded: kycDocUploadedSlots(mergedDocs),
+    kycDocOriginalNames: kycOriginalNamesFromLocalDocs(mergedDocs),
+    memberKycSlots,
     aadhaarLastFour: x.aadhaar_last_four,
     studentRollNumber: x.student_roll_number,
     institutionType: x.institution_type,

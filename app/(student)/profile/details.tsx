@@ -1,16 +1,30 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CopyIdButton } from '@/components/admin/CopyIdButton';
+import { clarityPageTitle } from '@/components/admin/clarityTokens';
+import { StudentSectionLabel } from '@/components/student/StudentSectionLabel';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useMemberPrefetch } from '@/components/member/MemberPrefetchProvider';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { api, deviceUserIdDisplayFromProfile, type MemberProfile } from '@/lib/api';
+import { deviceUserIdDisplayFromProfile } from '@/lib/api';
 import { formatDisplayName } from '@/lib/displayName';
-import { InfoRow, institutionLabel, verificationLabel, verificationTone } from '@/components/student/profileShared';
+import {
+  InfoRow,
+  institutionLabel,
+  resolveMemberContact,
+  verificationLabelForProfile,
+  verificationToneForProfile,
+} from '@/components/student/profileShared';
+
+function ProfileFieldsCard({ children }: { children: React.ReactNode }) {
+  return <Card style={{ padding: 0, overflow: 'hidden', marginTop: 6 }}>{children}</Card>;
+}
 
 export default function ProfileDetailsScreen() {
   const scheme = useColorScheme() ?? 'light';
@@ -18,36 +32,18 @@ export default function ProfileDetailsScreen() {
   const insets = useSafeAreaInsets();
   const { auth } = useAuth();
   const user = auth.status === 'signed_in' ? auth.user : null;
-  const token = auth.status === 'signed_in' ? auth.token : null;
 
-  const [memberProfile, setMemberProfile] = useState<MemberProfile | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!token) {
-      setMemberProfile(null);
-      setError(null);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const p = await api.memberProfile(token);
-      setMemberProfile(p);
-    } catch (e: unknown) {
-      setMemberProfile(null);
-      setError(e instanceof Error ? e.message : 'Could not load profile.');
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { profile: memberProfile, profileError, profileLoading, refetch } = useMemberPrefetch();
+  const loading = profileLoading && !memberProfile;
+  const error = profileError;
 
   const displayName = formatDisplayName(memberProfile?.name ?? user?.name) || (memberProfile?.name ?? user?.name ?? '—');
+  const deviceId = deviceUserIdDisplayFromProfile(memberProfile);
+  const verificationStatus = memberProfile?.verificationStatus ?? 'none';
+  const kycSlots = memberProfile?.memberKycSlots
+    ? Object.values(memberProfile.memberKycSlots)
+    : null;
+  const contact = resolveMemberContact(memberProfile, user);
 
   return (
     <ScrollView
@@ -63,71 +59,75 @@ export default function ProfileDetailsScreen() {
         <Card style={{ padding: 16, marginTop: 14, borderColor: c.border }}>
           <Text style={{ color: c.ink900, fontWeight: '600' }}>Could not load</Text>
           <Text style={{ marginTop: 6, color: c.ink600, fontSize: 13, lineHeight: 19 }}>{error}</Text>
-          <Button title="Try again" onPress={() => void load()} style={{ marginTop: 12 }} />
+          <Button title="Try again" onPress={() => void refetch()} style={{ marginTop: 12 }} />
         </Card>
       ) : null}
 
-      <Card style={{ padding: 0, overflow: 'hidden', marginTop: 14 }}>
-        <View style={[styles.section, { backgroundColor: c.surfaceMuted, borderBottomColor: c.ink100 }]}>
-          <Text style={[styles.kicker, { color: c.ink500 }]}>Your library profile</Text>
-          {loading && !memberProfile ? (
-            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-              <ActivityIndicator color={c.azure500} />
-            </View>
-          ) : (
-            <View style={{ marginTop: 12 }}>
-              <View style={[styles.libRow, { borderBottomColor: c.ink100 }]}>
-                <Text style={[styles.libLabel, { color: c.ink500 }]}>Device user id</Text>
-                <Text style={[styles.libValue, { color: c.azure600 }]}>
-                  {loading && !memberProfile ? '…' : deviceUserIdDisplayFromProfile(memberProfile)}
-                </Text>
-              </View>
-              <InfoRow label="Name" value={displayName} />
-              <InfoRow label="Phone" value={memberProfile?.phone ?? user?.phone ?? '—'} />
-              <InfoRow label="Email" value={memberProfile?.email ?? user?.email ?? '—'} />
-              <View style={[styles.verifyRow, { borderBottomColor: c.ink100, borderBottomWidth: 0 }]}>
-                <Text style={[styles.smallLab, { color: c.ink500 }]}>ID verification</Text>
-                <StatusBadge
-                  tone={verificationTone(memberProfile?.verificationStatus ?? 'none')}
-                  label={verificationLabel(memberProfile?.verificationStatus ?? 'none')}
-                />
-              </View>
-            </View>
-          )}
+      {loading && !memberProfile ? (
+        <View style={{ paddingVertical: 48, alignItems: 'center' }}>
+          <ActivityIndicator color={c.azure500} />
         </View>
+      ) : (
+        <>
+          <Card style={{ padding: 16, marginTop: 14, gap: 12 }}>
+            <Text style={[clarityPageTitle(24), { color: c.ink900 }]} numberOfLines={2}>
+              {displayName}
+            </Text>
+            <View style={[styles.memberIdPill, { backgroundColor: c.azure50, borderColor: c.azure100 }]}>
+              <Text style={[styles.memberIdLabel, { color: c.ink600 }]}>Member ID</Text>
+              <CopyIdButton value={deviceId === '—' ? '' : deviceId} label="Copy" preview={deviceId} />
+            </View>
+            <View style={[styles.verifyInline, { borderTopColor: c.ink100 }]}>
+              <Text style={[styles.verifyLabel, { color: c.ink600 }]}>ID verification</Text>
+              <StatusBadge
+                tone={verificationToneForProfile(verificationStatus, kycSlots)}
+                label={verificationLabelForProfile(verificationStatus, kycSlots)}
+              />
+            </View>
+          </Card>
 
-        <View style={[styles.section, { backgroundColor: c.surfaceMuted, borderBottomWidth: 0 }]}>
-          {loading && !memberProfile ? (
-            <View style={{ paddingVertical: 16, alignItems: 'center' }}>
-              <ActivityIndicator color={c.azure500} />
-            </View>
-          ) : (
-            <View>
-              <InfoRow label="Aadhaar (last 4)" value={memberProfile?.aadhaarLastFour?.trim() || '—'} />
-              <InfoRow label="Roll / registration no." value={memberProfile?.studentRollNumber?.trim() || '—'} />
-              <InfoRow label="Institution" value={institutionLabel(memberProfile?.institutionType)} />
-              <InfoRow label="Preparing for" value={memberProfile?.preparingFor?.trim() || '—'} last />
-            </View>
-          )}
-        </View>
-      </Card>
+          <StudentSectionLabel title="Contact" />
+          <ProfileFieldsCard>
+            <InfoRow layout="inline" label="Phone" value={contact.phone} />
+            <InfoRow layout="inline" label="Email" value={contact.email} last />
+          </ProfileFieldsCard>
+
+          <StudentSectionLabel title="Identity" />
+          <ProfileFieldsCard>
+            <InfoRow layout="inline" label="Aadhaar (last 4)" value={memberProfile?.aadhaarLastFour?.trim() || '—'} mono last />
+          </ProfileFieldsCard>
+
+          <StudentSectionLabel title="Study" />
+          <ProfileFieldsCard>
+            <InfoRow layout="inline" label="Roll / reg. no." value={memberProfile?.studentRollNumber?.trim() || '—'} />
+            <InfoRow layout="inline" label="Institution" value={institutionLabel(memberProfile?.institutionType)} />
+            <InfoRow layout="inline" label="Preparing for" value={memberProfile?.preparingFor?.trim() || '—'} last />
+          </ProfileFieldsCard>
+        </>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16, borderBottomWidth: StyleSheet.hairlineWidth },
-  kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', textAlign: 'left' },
-  libRow: { paddingBottom: 14, marginBottom: 4, borderBottomWidth: StyleSheet.hairlineWidth },
-  libLabel: { fontSize: 12, fontWeight: '600' },
-  libValue: { marginTop: 6, fontSize: 26, fontWeight: '700', fontFamily: 'SpaceMono', letterSpacing: 0.5 },
-  verifyRow: {
+  memberIdPill: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
   },
-  smallLab: { fontSize: 12, fontWeight: '600' },
+  memberIdLabel: { fontSize: 14, fontWeight: '500' },
+  verifyInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  verifyLabel: { fontSize: 15, fontWeight: '400' },
 });

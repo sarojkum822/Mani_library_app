@@ -1,7 +1,7 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
-import { CLARITY_BUTTON_RADIUS, CLARITY_MIN_TOUCH } from '@/components/admin/clarityTokens';
+import { CLARITY_BUTTON_RADIUS, CLARITY_BUTTON_TEXT, CLARITY_MIN_TOUCH } from '@/components/admin/clarityTokens';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 
@@ -11,9 +11,10 @@ type Props = {
   variant?: 'primary' | 'secondary' | 'ghost';
   style?: ViewStyle;
   disabled?: boolean;
+  loading?: boolean;
 };
 
-export function Button({ title, onPress, variant = 'primary', style, disabled }: Props) {
+export function Button({ title, onPress, variant = 'primary', style, disabled, loading }: Props) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
 
@@ -27,19 +28,34 @@ export function Button({ title, onPress, variant = 'primary', style, disabled }:
   const textStyle =
     variant === 'primary' ? { color: '#fff' } : variant === 'secondary' ? { color: c.ink900 } : { color: c.azure600 };
 
+  const busy = Boolean(loading);
+  const inactive = disabled || busy;
+
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={disabled ? undefined : onPress}
+      accessibilityState={{ disabled: inactive, busy }}
+      onPress={inactive ? undefined : onPress}
       style={({ pressed }) => [
         styles.base,
         containerStyle,
-        pressed && !disabled ? styles.pressed : null,
-        disabled ? styles.disabled : null,
+        pressed && !inactive ? styles.pressed : null,
+        inactive ? styles.disabled : null,
         style,
       ]}
     >
-      <Text style={[styles.text, textStyle]}>{title}</Text>
+      {busy ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator
+            size="small"
+            color={variant === 'primary' ? '#fff' : c.azure500}
+            style={styles.spinner}
+          />
+          <Text style={[CLARITY_BUTTON_TEXT, textStyle]}>{title}</Text>
+        </View>
+      ) : (
+        <Text style={[CLARITY_BUTTON_TEXT, textStyle]}>{title}</Text>
+      )}
     </Pressable>
   );
 }
@@ -54,8 +70,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: CLARITY_MIN_TOUCH,
   },
-  text: { fontSize: 15, fontWeight: '600' },
   pressed: { opacity: 0.88, transform: [{ scale: 0.99 }] },
   disabled: { opacity: 0.5 },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  spinner: { marginRight: 10 },
 });
 

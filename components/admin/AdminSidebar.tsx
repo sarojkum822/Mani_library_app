@@ -5,7 +5,9 @@ import { Link, useSegments } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 import { useAuth } from '@/components/auth/AuthProvider';
+import { BrandLogo } from '@/components/BrandLogo';
 import Colors from '@/constants/Colors';
+import { CLARITY_METRIC_LABEL, CLARITY_NAV_LABEL } from '@/components/admin/clarityTokens';
 import {
   ADMIN_GUTTER,
   ADMIN_NAV_ICON_GAP,
@@ -85,13 +87,8 @@ export function AdminSidebar({
           { borderBottomColor: c.border },
         ]}
       >
-        {/* Same grid as nav rows: [icon column][gap][label] — spacer aligns “Mani Library” with “Overview”. */}
         <View style={styles.logoRowGrid}>
-          <View style={styles.iconColumn} />
-          <View style={styles.logoMark}>
-            <Text style={[styles.logoText, { color: c.azure500 }]}>Mani</Text>
-            <Text style={[styles.logoSub, { color: c.ink900 }]}>Library</Text>
-          </View>
+          <BrandLogo variant="full" height={24} />
         </View>
       </View>
 
@@ -146,11 +143,11 @@ function SectionLabel({
   return (
     <Text
       style={[
+        CLARITY_METRIC_LABEL,
         styles.sectionLabel,
         variant === 'sheet' && styles.sectionLabelSheet,
         first ? styles.sectionFirst : afterDivider ? styles.sectionAfterDivider : styles.sectionFollowing,
         { color: variant === 'sheet' ? c.ink500 : c.ink400 },
-        styles.sectionFont,
         alignWithLabels,
       ]}
     >
@@ -192,7 +189,7 @@ function NavList({
                 <View style={styles.iconColumn}>
                   <FontAwesome name={item.icon} size={ADMIN_NAV_ICON_SIZE} color={active ? c.azure500 : c.ink400} />
                 </View>
-                <Text style={[styles.rowLabel, { color: active ? c.azure700 : c.ink600 }]}>{item.label}</Text>
+                <Text style={[CLARITY_NAV_LABEL, styles.navLabel, { color: active ? c.azure700 : c.ink600 }]}>{item.label}</Text>
               </View>
             </Pressable>
           </Link>
@@ -245,9 +242,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoMark: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, gap: 4 },
-  logoText: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
-  logoSub: { fontSize: 14, fontWeight: '600' },
   navScroll: { flex: 1 },
   navInner: { paddingHorizontal: 12, paddingVertical: 22, gap: 0 },
   navInnerSheet: {
@@ -261,14 +255,10 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 16,
     paddingHorizontal: 0,
-    fontSize: 10,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
   },
   sectionLabelSheet: {
     fontSize: 11,
-    letterSpacing: 1.6,
-    opacity: 1,
+    letterSpacing: 1.76,
   },
   sectionFirst: { marginTop: 2 },
   /** Thin rule between workspace and settings (see `sectionDivider`). */
@@ -282,7 +272,6 @@ const styles = StyleSheet.create({
   sectionAfterDivider: { marginTop: 18 },
   /** Clear separation before a section when no divider is used. */
   sectionFollowing: { marginTop: ADMIN_NAV_SECTION_TOP_GAP },
-  sectionFont: { fontWeight: '600' },
   list: {},
   /** Touch target: ≥44pt tall (HIG), content vertically centered in `rowInner`. */
   rowHit: {
@@ -306,12 +295,10 @@ const styles = StyleSheet.create({
     width: '100%',
     flexWrap: 'nowrap',
   },
-  rowLabel: {
+  navLabel: {
     flex: 1,
     flexShrink: 1,
     minWidth: 0,
-    fontSize: 14,
-    fontWeight: '600',
   },
   footer: {
     paddingHorizontal: 16,

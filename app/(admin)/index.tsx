@@ -79,7 +79,6 @@ export default function AdminDashboard() {
   }, []);
 
   const stats = overview?.stats;
-  const loading = overviewLoading || attLoading;
   const seatSnapshot = overview?.seatSnapshot ?? { longTermDistinctSeats: 0, shortTermDistinctSeats: 0 };
   const total = stats?.totalMembers ?? 0;
   const registered = stats?.registeredAccounts ?? total;
@@ -123,7 +122,7 @@ export default function AdminDashboard() {
       contentContainerStyle={adminScrollContentInsets(insets.bottom)}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={loading && !!overview} onRefresh={refreshAll} tintColor={c.azure500} />
+        <RefreshControl refreshing={revalidating || attLoading} onRefresh={refreshAll} tintColor={c.azure500} />
       }
     >
       {revalidating ? (

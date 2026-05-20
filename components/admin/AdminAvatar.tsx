@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { CLARITY_MONO_SM } from '@/components/admin/clarityTokens';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { displayPersonName } from '@/lib/formatPersonName';
@@ -36,6 +37,6 @@ const styles = StyleSheet.create({
   },
   large: { width: 36, height: 36 },
   small: { width: 28, height: 28 },
-  text: { fontFamily: 'SpaceMono', fontWeight: '600', fontSize: 12 },
+  text: { ...CLARITY_MONO_SM, fontSize: 12 },
   textSmall: { fontSize: 10 },
 });

@@ -2,9 +2,11 @@ import React, { useEffect } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/components/auth/AuthProvider';
 import Colors from '@/constants/Colors';
+import { FONT_SANS } from '@/constants/Fonts';
 import { useColorScheme } from '@/components/useColorScheme';
 import { tabBarElevation } from '@/lib/platformStyles';
 import { openStudentProfileHub } from '@/lib/openStudentProfileHub';
@@ -20,10 +22,12 @@ export default function StudentTabsLayout() {
   const router = useRouter();
   const segments = useSegments();
 
+  const insets = useSafeAreaInsets();
   const signedIn = auth.status === 'signed_in';
   /** Guest mode: brand (home) only — no member tabs or bottom bar until sign-in. */
   const guestMode = !signedIn;
   const showMemberTabs = signedIn;
+  const tabBarBottom = Math.max(insets.bottom, 8);
 
   useEffect(() => {
     if (signedIn) return;
@@ -40,7 +44,9 @@ export default function StudentTabsLayout() {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: c.border,
     backgroundColor: c.surface,
-    paddingTop: 4,
+    paddingTop: 6,
+    paddingBottom: tabBarBottom,
+    height: 52 + tabBarBottom,
     ...tabBarElevation(),
   };
 
@@ -52,8 +58,8 @@ export default function StudentTabsLayout() {
         tabBarActiveTintColor: c.tint,
         tabBarInactiveTintColor: c.tabIconDefault,
         tabBarLabelStyle: {
+          fontFamily: FONT_SANS.semibold,
           fontSize: 11,
-          fontWeight: '600',
           letterSpacing: 0.15,
         },
         tabBarIconStyle: { marginBottom: -2 },
@@ -94,7 +100,8 @@ export default function StudentTabsLayout() {
               segs.includes('details') ||
               segs.includes('doc') ||
               segs.includes('transactions') ||
-              segs.includes('membership');
+              segs.includes('membership') ||
+              segs.includes('recover-payment');
             if (onNestedProfile) {
               e.preventDefault();
               openStudentProfileHub();

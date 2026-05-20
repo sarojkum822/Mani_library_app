@@ -3,6 +3,7 @@ import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router, useFocusEffect } from 'expo-router';
 
+import { CLARITY_MONO } from '@/components/admin/clarityTokens';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { Card } from '@/components/ui/Card';
@@ -184,6 +185,17 @@ export default function StudentMembershipScreen() {
         </Card>
       ) : null}
 
+      {hasSubscription && data ? (
+        <Card style={[styles.heroCard, { backgroundColor: c.azure50, borderColor: c.azure100 }]}>
+          <Text style={[styles.kicker, { color: c.ink500 }]}>Membership</Text>
+          <Text style={[styles.heroStatus, { color: accent }]}>{statusLabel(data)}</Text>
+          <Text style={[textStyles.body, { color: c.ink700, marginTop: 4 }]} numberOfLines={2}>
+            {data.planName ?? 'Your plan'}
+            {data.seatNo ? ` · Seat ${data.seatNo}` : ''}
+          </Text>
+        </Card>
+      ) : null}
+
       <Card style={styles.quickContext}>
         <View style={styles.quickContextInner}>
           <View style={[styles.quickItem, { backgroundColor: c.azure50 }]}>
@@ -318,6 +330,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
+  heroCard: {
+    padding: 16,
+    marginBottom: 12,
+    gap: 2,
+    borderWidth: 1,
+    borderRadius: 16,
+  },
+  heroStatus: {
+    marginTop: 4,
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+
   quickContext: {
     paddingVertical: 12,
     paddingHorizontal: 12,
@@ -346,7 +372,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'column', alignItems: 'flex-start', gap: 4, paddingVertical: 8 },
   rowLabel: { fontSize: 12, fontWeight: '600' },
   rowValue: { fontSize: 14, fontWeight: '600', textAlign: 'left', alignSelf: 'stretch' },
-  rowMono: { fontFamily: 'SpaceMono' },
+  rowMono: { fontFamily: CLARITY_MONO.fontFamily },
   seatBanner: { paddingHorizontal: 16, paddingVertical: 18, borderBottomWidth: 1 },
   seatBannerLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
   seatNo: { marginTop: 8, fontSize: 28, fontWeight: '700', letterSpacing: -0.5 },

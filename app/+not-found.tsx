@@ -3,13 +3,17 @@ import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text, View } from '@/components/Themed';
+import { useColorScheme } from '@/components/useColorScheme';
+import { useNativeStackScreenOptions } from '@/lib/nativeStackScreenOptions';
 
 export default function NotFoundScreen() {
   const insets = useSafeAreaInsets();
+  const scheme = useColorScheme() ?? 'light';
+  const screenOptions = useNativeStackScreenOptions(scheme);
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Oops!' }} />
+      <Stack.Screen options={{ ...screenOptions, title: 'Oops!' }} />
       <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 20) }]}>
         <Text style={styles.title}>This screen doesn't exist.</Text>
 

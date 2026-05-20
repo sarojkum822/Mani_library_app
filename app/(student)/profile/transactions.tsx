@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CLARITY_MONO } from '@/components/admin/clarityTokens';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -163,5 +164,5 @@ const styles = StyleSheet.create({
   metaText: { fontSize: 15, fontWeight: '400' },
   amount: { fontSize: 17, fontWeight: '600' },
   period: { marginTop: 4, fontSize: 13, fontWeight: '400' },
-  receipt: { marginTop: 8, fontSize: 12, fontFamily: 'SpaceMono' },
+  receipt: { marginTop: 8, ...CLARITY_MONO, fontSize: 12 },
 });

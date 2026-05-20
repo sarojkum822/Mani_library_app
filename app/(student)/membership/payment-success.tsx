@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -9,6 +9,11 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Screen, textStyles } from '@/components/ui/Screen';
 import { formatYmdLong, formatYmdShort, isOnOrAfterYmd, todayYmdInLibraryTz } from '@/lib/membershipHubDates';
+import { useAuth } from '@/components/auth/AuthProvider';
+import { useMemberPrefetch } from '@/components/member/MemberPrefetchProvider';
+import { invalidateWarmMemberCore } from '@/components/member/memberPrefetchWarm';
+import { api, invalidateMemberAccountCache } from '@/lib/api';
+import { uploadDeferredMembershipKyc } from '@/lib/deferredMembershipKyc';
 
 function normalizeParam(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
@@ -27,7 +32,13 @@ export default function MembershipPaymentSuccessScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
 
+  const { auth } = useAuth();
+  const token = auth.status === 'signed_in' ? auth.token : null;
+  const mp = useMemberPrefetch();
+  const [syncNote, setSyncNote] = useState<string | null>(null);
+
   const params = useLocalSearchParams<{
+    paymentId?: string | string[];
     planTitle?: string | string[];
     seatLabel?: string | string[];
     membershipStartDate?: string | string[];
@@ -44,8 +55,45 @@ export default function MembershipPaymentSuccessScreen() {
   const totalRupees = totalRaw != null && totalRaw !== '' ? Number(totalRaw) : NaN;
   const intakeWarning = normalizeParam(params.intakeWarning) === '1';
 
+  const paymentId = normalizeParam(params.paymentId);
   const today = useMemo(() => todayYmdInLibraryTz(), []);
   const startsInFuture = startYmd.length > 0 && isOnOrAfterYmd(startYmd, today) && startYmd > today;
+
+  useEffect(() => {
+    if (!token || !paymentId) return;
+    let cancelled = false;
+    const delays = [0, 2000, 5000];
+    void (async () => {
+      for (const waitMs of delays) {
+        if (cancelled) return;
+        if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+        try {
+          const sync = await api.syncPendingRazorpayPayment(token, paymentId);
+          if (sync.outcome === 'paid') {
+            invalidateMemberAccountCache();
+            invalidateWarmMemberCore();
+            const kycUp = await uploadDeferredMembershipKyc(token);
+            if (kycUp.errors.length) {
+              if (!cancelled) {
+                setSyncNote(`Could not upload saved documents: ${kycUp.errors.join(' ')}`);
+              }
+            }
+            await mp.refetch();
+            if (!cancelled && kycUp.errors.length === 0) setSyncNote(null);
+            return;
+          }
+        } catch {
+          /* retry */
+        }
+      }
+      if (!cancelled) {
+        setSyncNote('If membership does not appear, pull to refresh or open Membership in a minute.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, paymentId, mp]);
 
   const periodLabel =
     startYmd && endYmd
@@ -86,7 +134,10 @@ export default function MembershipPaymentSuccessScreen() {
         ) : null}
       </Card>
 
-      {intakeWarning ? (
+        {syncNote ? (
+          <Text style={[styles.heroSub, { color: c.ink500, marginTop: 8 }]}>{syncNote}</Text>
+        ) : null}
+        {intakeWarning ? (
         <Card style={{ padding: 14, marginTop: 12, backgroundColor: c.azure50, borderColor: c.azure200 }}>
           <Text style={[textStyles.body, { color: c.azure700, lineHeight: 20 }]}>
             We could not save your profile answers just now. You can add them under Profile → Your profile.

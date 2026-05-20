@@ -1,4 +1,3 @@
-import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -15,7 +14,9 @@ import {
 
 import { AdminSeatPickerPanel } from '@/components/admin/AdminSeatPickerModal';
 import { Button } from '@/components/ui/Button';
+import { CLARITY_MONO } from '@/components/admin/clarityTokens';
 import Colors from '@/constants/Colors';
+import { FONT_MONO } from '@/constants/Fonts';
 import { useColorScheme } from '@/components/useColorScheme';
 import { api, type AdminManualEnrollResult } from '@/lib/api';
 import {
@@ -26,6 +27,7 @@ import {
 } from '@/lib/adminPricing';
 import { todayIsoYmd } from '@/lib/adminDates';
 import { formatPersonName } from '@/lib/formatPersonName';
+import { copyToClipboard } from '@/lib/clipboard';
 import { computeOrderAmountRupees } from '@/lib/membershipPricing';
 
 type Props = {
@@ -171,7 +173,7 @@ export function CreateMemberSheet({ visible, token, onClose, onSuccess }: Props)
       const result = await api.adminManualEnroll(token, body);
       onSuccess(result);
       if (result.temporary_password) {
-        await Clipboard.setStringAsync(result.temporary_password);
+        await copyToClipboard(result.temporary_password);
       }
       setCreatedResult(result);
     } catch (e: unknown) {
@@ -520,10 +522,9 @@ const styles = StyleSheet.create({
   },
   deviceIdLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
   deviceIdValue: {
+    fontFamily: FONT_MONO.bold,
     fontSize: 32,
-    fontWeight: '700',
     fontVariant: ['tabular-nums'],
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     letterSpacing: 1,
   },
   deviceIdHint: { marginTop: 4, fontSize: 13, lineHeight: 18, fontWeight: '400' },
@@ -533,7 +534,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     gap: 6,
   },
-  passwordValue: { fontSize: 17, fontWeight: '600', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  passwordValue: { ...CLARITY_MONO, fontFamily: FONT_MONO.semibold, fontSize: 17 },
   field: { gap: 8 },
   label: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
   input: {
@@ -544,7 +545,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: 48,
   },
-  mono: { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 14 },
+  mono: CLARITY_MONO,
   multiline: { minHeight: 72, textAlignVertical: 'top' },
   note: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
   seatPickerBtn: {

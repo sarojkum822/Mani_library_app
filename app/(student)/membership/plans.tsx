@@ -97,7 +97,10 @@ export default function MembershipPlansScreen() {
     setQuickRenewing(true);
     try {
       const res = await api.renewMembership(token);
-      if (res.paymentUrl) await Linking.openURL(res.paymentUrl);
+      if (res.paymentUrl) {
+        await Linking.openURL(res.paymentUrl);
+        return;
+      }
       void mp.refetch();
       router.replace('/(student)/membership');
     } finally {

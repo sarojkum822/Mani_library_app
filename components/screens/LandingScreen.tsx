@@ -17,6 +17,7 @@ import { seatMapPlanIdForMarketingPlan } from '@/lib/marketingPlanSeatPreview';
 import { displayPersonName } from '@/lib/formatPersonName';
 import { openStudentProfileHub } from '@/lib/openStudentProfileHub';
 import type { LibraryInfoJson } from '@/lib/libraryInfoTypes';
+import { BrandLogo } from '@/components/BrandLogo';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 
@@ -136,7 +137,7 @@ export function LandingScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.surface }} edges={['top', 'left', 'right']}>
       <View style={[styles.nav, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-        <Text style={[styles.logo, { color: c.ink900 }]}>Mani Library</Text>
+        <BrandLogo variant="full" height={30} />
         {isStudentSignedIn ? (
           <Pressable
             onPress={openStudentProfileHub}
@@ -481,30 +482,20 @@ export function LandingScreen() {
             />
 
             <View style={[styles.footerInner, { paddingBottom: Math.max(28, insets.bottom + 20) }]}>
-              <View style={styles.footerBrandRow}>
-                <View
-                  style={[
-                    styles.footerBrandMark,
-                    { backgroundColor: footerTheme.markBg, borderColor: footerTheme.markBorder },
-                  ]}
-                >
-                  <FontAwesome name="book" size={22} color={footerTheme.title} />
-                </View>
-                <View style={styles.footerBrandTextCol}>
-                  <Text style={[styles.footerBrand, { color: footerTheme.title }]}>{lib.name}</Text>
-                  <View style={styles.footerMetaPills}>
-                    <View style={[styles.footerMetaPill, { borderColor: footerTheme.quickTileBorder }]}>
-                      <FontAwesome name="map-marker" size={10} color={footerTheme.linkAccent} />
-                      <Text style={[styles.footerMetaPillText, { color: footerTheme.subtitle }]} numberOfLines={1}>
-                        {lib.address.city}
-                      </Text>
-                    </View>
-                    <View style={[styles.footerMetaPill, { borderColor: footerTheme.quickTileBorder }]}>
-                      <FontAwesome name="clock-o" size={10} color={footerTheme.linkAccent} />
-                      <Text style={[styles.footerMetaPillText, { color: footerTheme.subtitle }]} numberOfLines={1}>
-                        {lib.hours.split('·')[0]?.trim() ?? '24/7'}
-                      </Text>
-                    </View>
+              <View style={styles.footerBrandBlock}>
+                <BrandLogo variant="full" height={40} />
+                <View style={styles.footerMetaPills}>
+                  <View style={[styles.footerMetaPill, { borderColor: footerTheme.quickTileBorder }]}>
+                    <FontAwesome name="map-marker" size={10} color={footerTheme.linkAccent} />
+                    <Text style={[styles.footerMetaPillText, { color: footerTheme.subtitle }]} numberOfLines={1}>
+                      {lib.address.city}
+                    </Text>
+                  </View>
+                  <View style={[styles.footerMetaPill, { borderColor: footerTheme.quickTileBorder }]}>
+                    <FontAwesome name="clock-o" size={10} color={footerTheme.linkAccent} />
+                    <Text style={[styles.footerMetaPillText, { color: footerTheme.subtitle }]} numberOfLines={1}>
+                      {lib.hours.split('·')[0]?.trim() ?? '24/7'}
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -800,7 +791,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  logo: { fontSize: 16, fontWeight: '600', letterSpacing: -0.2 },
   guestRibbon: {
     paddingVertical: 10,
     paddingHorizontal: 16,
@@ -1010,26 +1000,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 26,
   },
-  footerBrandRow: {
-    flexDirection: 'row',
+  footerBrandBlock: {
+    gap: 12,
     alignItems: 'flex-start',
-    gap: 14,
   },
-  footerBrandMark: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  footerBrandTextCol: {
-    flex: 1,
-    minWidth: 0,
-    paddingTop: 2,
-    gap: 10,
-  },
-  footerBrand: { fontSize: 20, fontWeight: '700', letterSpacing: -0.35 },
   footerMetaPills: {
     flexDirection: 'row',
     flexWrap: 'wrap',

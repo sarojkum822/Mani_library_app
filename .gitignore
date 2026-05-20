@@ -9,9 +9,7 @@ dist/
 web-build/
 expo-env.d.ts
 
-# Native (EAS prebuild generates these; do not commit)
-/android
-/ios
+
 
 # Native
 .kotlin/
@@ -37,6 +35,7 @@ yarn-error.*
 # local env files
 .env
 .env*.local
+.env.example
 
 # typescript
 *.tsbuildinfo

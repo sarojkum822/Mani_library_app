@@ -1,5 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
+import { useStaleWhileRevalidate } from '@/hooks/useStaleWhileRevalidate';
+import { cacheKeys } from '@/lib/dataCache';
 import {
   ActivityIndicator,
   Alert,
@@ -31,38 +33,33 @@ export default function AdminDocsScreen() {
   const token = auth.status === 'signed_in' ? auth.token : null;
   const { focus } = useLocalSearchParams<{ focus?: string }>();
 
-  const [items, setItems] = useState<AdminPendingKycMember[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [docs, setDocs] = useState<AdminKycDocument[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [memberNote, setMemberNote] = useState('');
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!token) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const pending = await api.adminPendingKycMembers(token);
-      setItems(pending);
-      const focusId = typeof focus === 'string' ? focus : '';
-      if (focusId && pending.some((p) => p.userId === focusId)) {
-        setExpandedUserId(focusId);
-      }
-    } catch {
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [token, focus]);
+  const fetchPending = useCallback(async () => {
+    if (!token) throw new Error('Sign in as admin.');
+    return api.adminPendingKycMembers(token);
+  }, [token]);
+
+  const { data: items, loading, revalidating } = useStaleWhileRevalidate<AdminPendingKycMember[]>({
+    cacheKey: cacheKeys.adminPendingKyc,
+    fetcher: fetchPending,
+    refreshKey,
+    enabled: !!token,
+  });
+
+  const itemsList = items ?? [];
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    const focusId = typeof focus === 'string' ? focus : '';
+    if (focusId && itemsList.some((p) => p.userId === focusId)) {
+      setExpandedUserId(focusId);
+    }
+  }, [focus, itemsList]);
 
   useEffect(() => {
     if (!token || !expandedUserId) {
@@ -91,7 +88,7 @@ export default function AdminDocsScreen() {
     setBusy(`${userId}:approve`);
     try {
       await api.adminVerifyProfile(token, userId);
-      await refresh();
+      setRefreshKey((k) => k + 1);
       if (expandedUserId === userId) setExpandedUserId(null);
     } catch (e: unknown) {
       Alert.alert('Approve failed', e instanceof Error ? e.message : 'Unknown error');
@@ -115,7 +112,7 @@ export default function AdminDocsScreen() {
         studentMessage: trimmed.length ? trimmed : undefined,
       });
       setMemberNote('');
-      await refresh();
+      setRefreshKey((k) => k + 1);
       if (expandedUserId === userId) setExpandedUserId(null);
     } catch (e: unknown) {
       Alert.alert('Action failed', e instanceof Error ? e.message : 'Unknown error');
@@ -129,7 +126,9 @@ export default function AdminDocsScreen() {
       style={[styles.root, { backgroundColor: c.surfaceMuted }]}
       contentContainerStyle={adminScrollContentInsets(insets.bottom)}
       showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void refresh()} tintColor={c.azure500} />}
+      refreshControl={
+        <RefreshControl refreshing={revalidating} onRefresh={() => setRefreshKey((k) => k + 1)} tintColor={c.azure500} />
+      }
     >
       <AdminPageHeader
         eyebrow="verification"
@@ -137,12 +136,12 @@ export default function AdminDocsScreen() {
         description="Review and verify member identity documents."
       />
 
-      {loading && items.length === 0 ? (
+      {loading && itemsList.length === 0 ? (
         <ActivityIndicator style={{ marginVertical: 20 }} color={c.azure500} />
       ) : (
         <View style={[styles.countRow, { backgroundColor: c.surface, borderColor: c.border }]}>
           <Text style={[styles.countLabel, { color: c.ink500 }]}>Pending review</Text>
-          <Text style={[styles.countValue, { color: c.ink900 }]}>{items.length}</Text>
+          <Text style={[styles.countValue, { color: c.ink900 }]}>{itemsList.length}</Text>
         </View>
       )}
 
@@ -150,7 +149,7 @@ export default function AdminDocsScreen() {
         <Text style={[styles.hint, { color: c.azure700 }]}>Sign in as admin to load pending documents.</Text>
       ) : null}
 
-      {items.map((it) => {
+      {itemsList.map((it) => {
         const open = expandedUserId === it.userId;
         return (
           <View key={it.userId} style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
@@ -238,7 +237,7 @@ export default function AdminDocsScreen() {
         );
       })}
 
-      {token && !loading && items.length === 0 ? (
+      {token && !loading && itemsList.length === 0 ? (
         <View style={[styles.emptyBox, { backgroundColor: c.surface, borderColor: c.border }]}>
           <Text style={[styles.emptyTitle, { color: c.ink900 }]}>All caught up</Text>
           <Text style={[styles.emptyBody, { color: c.ink600 }]}>No members with pending KYC review.</Text>

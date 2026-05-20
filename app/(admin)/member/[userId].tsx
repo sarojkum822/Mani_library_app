@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -24,7 +24,15 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { Button } from '@/components/ui/Button';
 import { MembershipStatusBadge } from '@/components/admin/MembershipStatusBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { api, type AdminPaymentListRow } from '@/lib/api';
+import { useStaleWhileRevalidate } from '@/hooks/useStaleWhileRevalidate';
+import { api, type AdminOverviewStats, type AdminPaymentListProfile, type AdminPaymentListRow } from '@/lib/api';
+
+type PaymentsScreenData = {
+  stats: AdminOverviewStats;
+  rows: AdminPaymentListRow[];
+  profiles: Record<string, AdminPaymentListProfile>;
+};
+import { cacheKeys } from '@/lib/dataCache';
 import { addDaysIsoYmd, deviceUserIdToEmpcode, isoToDMY, todayIsoYmd } from '@/lib/adminDates';
 import { deviceUserIdInlineLabel } from '@/lib/deviceUserIdLabel';
 import {
@@ -48,60 +56,88 @@ export default function AdminMemberDetailScreen() {
   const { auth } = useAuth();
   const token = auth.status === 'signed_in' ? auth.token : null;
 
-  const [member, setMember] = useState<Member | null>(null);
-  const [payments, setPayments] = useState<AdminPaymentListRow[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [attendance, setAttendance] = useState<PunchRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
 
   const uid = typeof userId === 'string' ? userId : '';
 
-  const load = useCallback(async () => {
-    if (!token || !uid) {
-      setMember(null);
-      setErr('Sign in as admin.');
-      setLoading(false);
+  const fetchMembers = useCallback(async () => {
+    if (!token) throw new Error('Sign in as admin.');
+    return api.adminMembersList(token);
+  }, [token]);
+
+  const fetchPaymentsScreen = useCallback(async (): Promise<PaymentsScreenData> => {
+    if (!token) throw new Error('Sign in as admin.');
+    const [ov, pay] = await Promise.all([api.adminOverview(token), api.adminPaymentsList(token)]);
+    return { stats: ov.stats, rows: pay.rows, profiles: pay.profiles };
+  }, [token]);
+
+  const {
+    data: members = [],
+    loading: membersLoading,
+    revalidating: membersRevalidating,
+    error: membersError,
+  } = useStaleWhileRevalidate<Member[]>({
+    cacheKey: cacheKeys.adminMembers,
+    fetcher: fetchMembers,
+    refreshKey,
+    enabled: !!token && !!uid,
+  });
+
+  const { data: payData } = useStaleWhileRevalidate<PaymentsScreenData>({
+    cacheKey: cacheKeys.adminPaymentsScreen,
+    fetcher: fetchPaymentsScreen,
+    refreshKey,
+    enabled: !!token && !!uid,
+  });
+
+  const membersList = members ?? [];
+
+  const member = useMemo(
+    () =>
+      membersList.find((row) => row.userId === uid) ??
+      membersList.find((row) => row.listKey === `account:${uid}`) ??
+      null,
+    [membersList, uid],
+  );
+
+  const payments = useMemo(
+    () => (payData?.rows ?? []).filter((r) => r.userId === uid).slice(0, 12),
+    [payData?.rows, uid],
+  );
+
+  const loading = membersLoading && !member;
+  const err = membersError;
+  const revalidating = membersRevalidating;
+
+  useEffect(() => {
+    if (!token || !member?.libraryNumber) {
+      setAttendance([]);
       return;
     }
-    setLoading(true);
-    setErr(null);
-    try {
-      const [members, payPayload] = await Promise.all([
-        api.adminMembersList(token),
-        api.adminPaymentsList(token),
-      ]);
-      const m =
-        members.find((row) => row.userId === uid) ??
-        members.find((row) => row.listKey === `account:${uid}`) ??
-        null;
-      setMember(m);
-      setPayments(payPayload.rows.filter((r) => r.userId === uid).slice(0, 12));
-
-      if (m?.libraryNumber) {
+    let cancelled = false;
+    setAttendanceLoading(true);
+    void (async () => {
+      try {
         const to = todayIsoYmd();
         const from = addDaysIsoYmd(to, -6);
         const punches = await api.adminDailyAttendance(token, {
           fromDate: isoToDMY(from),
           toDate: isoToDMY(to),
-          empcode: deviceUserIdToEmpcode(m.libraryNumber),
+          empcode: deviceUserIdToEmpcode(member.libraryNumber),
         });
-        setAttendance(sortRecords(punches));
-      } else {
-        setAttendance([]);
+        if (!cancelled) setAttendance(sortRecords(punches));
+      } catch {
+        if (!cancelled) setAttendance([]);
+      } finally {
+        if (!cancelled) setAttendanceLoading(false);
       }
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : 'Could not load member.');
-      setMember(null);
-      setPayments([]);
-      setAttendance([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [token, uid]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, member?.libraryNumber]);
 
   const callMember = useCallback(() => {
     const phone = member?.phone?.replace(/\s/g, '');
@@ -133,7 +169,9 @@ export default function AdminMemberDetailScreen() {
     <ScrollView
       style={[styles.root, { backgroundColor: c.surfaceMuted }]}
       contentContainerStyle={adminScrollContentInsets(insets.bottom)}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={c.azure500} />}
+      refreshControl={
+        <RefreshControl refreshing={revalidating} onRefresh={() => setRefreshKey((k) => k + 1)} tintColor={c.azure500} />
+      }
       showsVerticalScrollIndicator={false}
     >
       <AdminPageHeader
@@ -206,9 +244,10 @@ export default function AdminMemberDetailScreen() {
           </AdminSectionCard>
 
           <AdminSectionCard title="Attendance · 7 days" paddedBody={false}>
-            {attendance.length === 0 ? (
+            {attendanceLoading ? <ActivityIndicator color={c.azure500} style={{ margin: 16 }} /> : null}
+            {!attendanceLoading && attendance.length === 0 ? (
               <Text style={[styles.emptyInline, { color: c.ink500 }]}>No punches in the last 7 days.</Text>
-            ) : (
+            ) : !attendanceLoading ? (
               attendance.map((r, i) => (
                 <AdminListRow
                   key={`${r.Empcode}-${r.DateString}`}
@@ -225,7 +264,7 @@ export default function AdminMemberDetailScreen() {
                   showChevron={false}
                 />
               ))
-            )}
+            ) : null}
           </AdminSectionCard>
 
           <Text style={[styles.footMeta, { color: c.ink500 }]}>

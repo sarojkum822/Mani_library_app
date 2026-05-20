@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, Text, View, Alert } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router, useLocalSearchParams } from 'expo-router';
 
@@ -28,6 +28,7 @@ import { openRazorpayCheckout } from '@/lib/razorpayNative';
 import { formatPhoneForRazorpayPrefill } from '@/lib/razorpayPrefill';
 import { sanitizeAadhaarLastFourInput, sanitizeRollNumberDigitsInput } from '@/lib/intakeFieldLimits';
 import { MEMBERSHIP_INSTITUTION_VALUES } from '@/lib/membershipInstitutionOptions';
+import { uploadDeferredMembershipKyc } from '@/lib/deferredMembershipKyc';
 
 function normalizeParam(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
@@ -173,8 +174,15 @@ export default function MembershipCheckoutScreen() {
         checkoutOptions.method = 'card';
       }
 
+      if (Platform.OS === 'web' && order.hostedCheckoutUrl) {
+        await Linking.openURL(order.hostedCheckoutUrl);
+        setErr('Complete payment in the browser tab, then return to the app and open Membership.');
+        return;
+      }
+
       const resp = await openRazorpayCheckout(checkoutOptions);
 
+      let settled = false;
       try {
         await api.verifyRazorpayPayment(token, {
           razorpay_order_id: resp.razorpay_order_id,
@@ -182,11 +190,21 @@ export default function MembershipCheckoutScreen() {
           razorpay_signature: resp.razorpay_signature,
           payment_id: order.paymentId,
         });
-      } catch (verifyErr) {
+        settled = true;
+      } catch {
         if (resp.razorpay_payment_id?.startsWith('pay_')) {
-          await api.reconcileRazorpayPayment(token, resp.razorpay_payment_id);
-        } else {
-          throw verifyErr;
+          try {
+            await api.reconcileRazorpayPayment(token, resp.razorpay_payment_id);
+            settled = true;
+          } catch {
+            /* fall through to sync-pending */
+          }
+        }
+        if (!settled) {
+          const sync = await api.syncPendingRazorpayPayment(token, order.paymentId);
+          if (sync.outcome !== 'paid') {
+            throw new Error('Payment could not be confirmed. Try again or contact the desk.');
+          }
         }
       }
 
@@ -200,6 +218,11 @@ export default function MembershipCheckoutScreen() {
         }
       }
 
+      const kycUp = await uploadDeferredMembershipKyc(token);
+      if (kycUp.errors.length) {
+        Alert.alert('Document upload', kycUp.errors.join('\n'));
+      }
+
       invalidateMemberAccountCache();
       invalidateWarmMemberCore();
       await mp.refetch();
@@ -211,6 +234,7 @@ export default function MembershipCheckoutScreen() {
       router.replace({
         pathname: '/(student)/membership/payment-success',
         params: {
+          paymentId: order.paymentId,
           planTitle: title,
           seatLabel,
           membershipStartDate,
@@ -222,7 +246,19 @@ export default function MembershipCheckoutScreen() {
     } catch (e) {
       const description = e instanceof Error ? e.message : 'Checkout failed.';
       if (paymentId) {
-        void api.abandonRazorpayCheckout(token, paymentId).catch(() => {});
+        const lower = description.toLowerCase();
+        const cancelled =
+          lower.includes('cancel') || lower.includes('closed') || lower.includes('dismissed');
+        if (cancelled) {
+          void api.abandonRazorpayCheckout(token, paymentId).catch(() => {});
+        } else {
+          void api
+            .markRazorpayCheckoutFailed(token, {
+              payment_id: paymentId,
+              error: { description },
+            })
+            .catch(() => {});
+        }
       }
       setErr(description);
     } finally {

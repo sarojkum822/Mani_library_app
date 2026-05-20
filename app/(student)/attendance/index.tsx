@@ -93,7 +93,7 @@ export default function StudentAttendanceScreen() {
     void loadLocal();
   }, [token, isStudent, loadLocal]);
 
-  const loading = isStudent ? !mp.ready : localLoading;
+  const loading = isStudent ? mp.attendance == null && mp.attendanceError == null : localLoading;
   const data = isStudent ? mp.attendance : localData;
   const error = isStudent ? mp.attendanceError : localError;
 
