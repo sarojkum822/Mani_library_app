@@ -9,6 +9,10 @@ dist/
 web-build/
 expo-env.d.ts
 
+# Native (EAS prebuild generates these; do not commit)
+/android
+/ios
+
 # Native
 .kotlin/
 *.orig.*

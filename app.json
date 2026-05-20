@@ -7,9 +7,9 @@
     "icon": "./assets/images/icon.png",
     "scheme": "studentapp",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
-      "image": "./assets/images/splash-composite.png",
+      "image": "./assets/images/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#E6F0FB"
     },
@@ -18,7 +18,7 @@
       "bundleIdentifier": "com.anonymous.studentapp",
       "icon": "./assets/images/icon.png",
       "splash": {
-        "image": "./assets/images/splash-composite.png",
+        "image": "./assets/images/splash.png",
         "resizeMode": "contain",
         "backgroundColor": "#E6F0FB"
       },
@@ -29,7 +29,7 @@
     "android": {
       "icon": "./assets/images/icon.png",
       "splash": {
-        "image": "./assets/images/splash-composite.png",
+        "image": "./assets/images/splash.png",
         "resizeMode": "contain",
         "backgroundColor": "#E6F0FB"
       },
