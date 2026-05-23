@@ -48,7 +48,7 @@ export default function ProfileMembershipScreen() {
     };
   }, [token, isStudent]);
 
-  const loading = isStudent ? !mp.accountReady : nonStudentLoading;
+  const loading = isStudent ? mp.loading : nonStudentLoading;
   const membership = isStudent ? mp.membership : nonStudentMembership;
   const prefetchError = isStudent ? mp.prefetchError : null;
 

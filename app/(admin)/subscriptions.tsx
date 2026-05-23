@@ -107,7 +107,7 @@ export default function AdminSubscriptionsScreen() {
 
   return (
     <ScrollView
-      style={[styles.root, { backgroundColor: c.surfaceMuted }]}
+      style={styles.root}
       contentContainerStyle={adminScrollContentInsets(insets.bottom)}
       showsVerticalScrollIndicator={false}
       refreshControl={

@@ -15,6 +15,7 @@ export default function ProfileStackLayout() {
       <Stack.Screen name="doc" options={{ title: 'Documents' }} />
       <Stack.Screen name="transactions" options={{ title: 'Payments' }} />
       <Stack.Screen name="recover-payment" options={{ title: 'Recover payment' }} />
+      <Stack.Screen name="feedback" options={{ title: 'Feedback' }} />
     </Stack>
   );
 }

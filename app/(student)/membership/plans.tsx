@@ -41,7 +41,7 @@ export default function MembershipPlansScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [quickRenewing, setQuickRenewing] = useState(false);
 
-  const loadingRenewSection = intent === 'renew' && (isStudent ? !mp.accountReady : loadingNonStudentRenew);
+  const loadingRenewSection = intent === 'renew' && (isStudent ? mp.loading : loadingNonStudentRenew);
 
   useEffect(() => {
     if (intent !== 'renew') {
@@ -75,7 +75,7 @@ export default function MembershipPlansScreen() {
 
   useEffect(() => {
     if (!token || intent !== 'renew' || !isStudent) return;
-    if (!mp.accountReady) return;
+    if (mp.loading) return;
     const m = mp.membership;
     setCurrent(m);
     if (m?.planMarketingId) setSelectedId(m.planMarketingId);
@@ -84,7 +84,7 @@ export default function MembershipPlansScreen() {
       if (name.includes('row') || name.includes('short')) setSelectedId('row-hall');
       else if (name.includes('main') || name.includes('long')) setSelectedId('main-hall');
     }
-  }, [token, intent, isStudent, mp.accountReady, mp.membership]);
+  }, [token, intent, isStudent, mp.loading, mp.membership]);
 
   const title = intent === 'renew' ? 'Renew membership' : 'Buy membership';
   const subtitle =
@@ -119,10 +119,7 @@ export default function MembershipPlansScreen() {
   };
 
   const buyBlocked =
-    intent === 'buy' &&
-    isStudent &&
-    mp.accountReady &&
-    hasActiveMembership(mp.membership);
+    intent === 'buy' && isStudent && !mp.loading && hasActiveMembership(mp.membership);
 
   if (intent === 'buy' && buyBlocked) {
     const previewPlanId = seatMapPlanIdForMarketingPlan(planIdFromRoute ?? mp.membership?.planMarketingId ?? 'main-hall');

@@ -1,18 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 
-import { CLARITY_MONO } from '@/components/admin/clarityTokens';
 import Colors from '@/constants/Colors';
+import { type } from '@/constants/Typography';
 import { useColorScheme } from '@/components/useColorScheme';
+import { DetailRow } from '@/components/student/DetailRow';
+import { StudentSectionLabel } from '@/components/student/StudentSectionLabel';
+import { PaymentHistoryList } from '@/components/student/PaymentHistoryList';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Screen, textStyles } from '@/components/ui/Screen';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useLibraryInfo } from '@/components/library/LibraryInfoProvider';
 import { useMemberPrefetch } from '@/components/member/MemberPrefetchProvider';
-import { api, deviceUserIdDisplayFromProfile, type Membership } from '@/lib/api';
+import { api, deviceUserIdDisplayFromProfile, type Membership, type ResumableCheckout } from '@/lib/api';
+import {
+  LONG_TERM_DURATION_OPTIONS,
+  SHORT_TERM_DURATION_OPTIONS,
+} from '@/lib/membershipPricing';
 import { seatMapPlanIdForMarketingPlan } from '@/lib/marketingPlanSeatPreview';
 
 function statusLabel(m: Membership) {
@@ -21,6 +29,13 @@ function statusLabel(m: Membership) {
   if (m.status === 'expiring_soon') return 'Expiring soon';
   if (m.status === 'expired') return 'Expired';
   return 'Not active';
+}
+
+function statusTone(m: Membership): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (m.status === 'active') return 'success';
+  if (m.status === 'expiring_soon' || m.status === 'upcoming') return 'warning';
+  if (m.status === 'expired') return 'danger';
+  return 'neutral';
 }
 
 function formatStartDate(iso: string | undefined): string {
@@ -45,6 +60,8 @@ export default function StudentMembershipScreen() {
 
   const [nonStudentData, setNonStudentData] = useState<Membership | null>(null);
   const [nonStudentLoading, setNonStudentLoading] = useState(false);
+  const [pendingCheckout, setPendingCheckout] = useState<ResumableCheckout | null>(null);
+  const [pendingDismissing, setPendingDismissing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,15 +97,10 @@ export default function StudentMembershipScreen() {
   }, [token, isStudent]);
 
   const data = isStudent ? mp.membership : nonStudentData;
-  const bundleLoading = isStudent ? !mp.accountReady : nonStudentLoading;
+  const coreLoading = isStudent ? mp.loading : nonStudentLoading;
   const prefetchError = isStudent ? mp.prefetchError : null;
 
-  const accent = useMemo(() => {
-    if (!data) return c.ink600;
-    return data.status === 'expired' ? c.ink700 : data.status === 'expiring_soon' ? c.azure700 : c.ink700;
-  }, [c, data]);
-
-  const hasSubscription = data && data.status !== 'none';
+  const hasSubscription = !coreLoading && data && data.status !== 'none';
   const isUpcoming = data?.status === 'upcoming';
   const [refreshing, setRefreshing] = useState(false);
 
@@ -102,12 +114,62 @@ export default function StudentMembershipScreen() {
     }
   }, [isStudent, token, mp]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!isStudent || !token || !mp.accountReady) return;
-      void mp.refetch();
-    }, [isStudent, token, mp.accountReady, mp.refetch]),
-  );
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!token || !isStudent) {
+        if (!cancelled) setPendingCheckout(null);
+        return;
+      }
+      try {
+        const r = await api.resumableCheckout(token);
+        if (!cancelled) setPendingCheckout(r);
+      } catch {
+        if (!cancelled) setPendingCheckout(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, isStudent]);
+
+  const pendingDurationLabel = useMemo(() => {
+    if (!pendingCheckout) return '';
+    const list =
+      pendingCheckout.planKind === 'short_term' ? SHORT_TERM_DURATION_OPTIONS : LONG_TERM_DURATION_OPTIONS;
+    return list.find((o) => o.key === pendingCheckout.durationKey)?.label ?? pendingCheckout.durationKey;
+  }, [pendingCheckout]);
+
+  const dismissPendingCheckout = useCallback(async () => {
+    if (!token || !pendingCheckout) return;
+    setPendingDismissing(true);
+    try {
+      await api.markRazorpayCheckoutFailed(token, {
+        payment_id: pendingCheckout.paymentId,
+        error: { description: 'Member chose to start over from membership' },
+      });
+      setPendingCheckout(null);
+    } finally {
+      setPendingDismissing(false);
+    }
+  }, [token, pendingCheckout]);
+
+  const continuePendingCheckout = useCallback(() => {
+    if (!pendingCheckout) return;
+    const planId = pendingCheckout.planKind === 'short_term' ? 'row-hall' : 'main-hall';
+    router.push({
+      pathname: '/(student)/membership/checkout',
+      params: {
+        planId,
+        planKind: pendingCheckout.planKind,
+        durationKey: pendingCheckout.durationKey,
+        membershipStartDate: pendingCheckout.membershipStartDate,
+        seatNumber: String(pendingCheckout.seatNumber),
+      },
+    });
+  }, [pendingCheckout]);
+
+  const paymentHistory = isStudent ? mp.payments : null;
 
   if (!token) {
     return (
@@ -135,18 +197,7 @@ export default function StudentMembershipScreen() {
     );
   }
 
-  if (bundleLoading) {
-    return (
-      <Screen title="Membership" subtitle="Your plan, seat, and renewal" scrollable>
-        <Card style={{ padding: 28, alignItems: 'center', gap: 12 }}>
-          <ActivityIndicator color={c.azure500} />
-          <Text style={[textStyles.body, { color: c.ink600, textAlign: 'center' }]}>Loading your membership…</Text>
-        </Card>
-      </Screen>
-    );
-  }
-
-  const seatBlock = hasSubscription ? (
+  const seatBlock = coreLoading ? null : hasSubscription ? (
     <Card style={{ padding: 0, overflow: 'hidden', marginTop: 12 }}>
       <View style={[styles.seatBanner, { backgroundColor: c.azure50, borderBottomColor: c.azure200 }]}>
         <Text style={[styles.seatBannerLabel, { color: c.azure700 }]}>Your library spot</Text>
@@ -185,62 +236,76 @@ export default function StudentMembershipScreen() {
         </Card>
       ) : null}
 
-      {hasSubscription && data ? (
-        <Card style={[styles.heroCard, { backgroundColor: c.azure50, borderColor: c.azure100 }]}>
-          <Text style={[styles.kicker, { color: c.ink500 }]}>Membership</Text>
-          <Text style={[styles.heroStatus, { color: accent }]}>{statusLabel(data)}</Text>
-          <Text style={[textStyles.body, { color: c.ink700, marginTop: 4 }]} numberOfLines={2}>
-            {data.planName ?? 'Your plan'}
-            {data.seatNo ? ` · Seat ${data.seatNo}` : ''}
+      {pendingCheckout ? (
+        <Card style={{ padding: 14, marginBottom: 12, gap: 10, borderColor: '#fcd34d', backgroundColor: '#fffbeb' }}>
+          <Text style={[styles.pendingTitle, { color: '#78350f' }]}>Continue where you left off</Text>
+          <Text style={[textStyles.body, { color: '#92400e', lineHeight: 20 }]}>
+            Seat {pendingCheckout.seatLabel}, starts {pendingCheckout.membershipStartDate}, {pendingDurationLabel}. Total
+            ₹{pendingCheckout.amountRupees.toLocaleString('en-IN')}.
           </Text>
+          <Button title="Continue payment" onPress={continuePendingCheckout} />
+          <Button
+            title={pendingDismissing ? 'Cancelling…' : 'Start over (discard checkout)'}
+            variant="secondary"
+            disabled={pendingDismissing}
+            onPress={() => void dismissPendingCheckout()}
+          />
         </Card>
       ) : null}
 
-      <Card style={styles.quickContext}>
-        <View style={styles.quickContextInner}>
-          <View style={[styles.quickItem, { backgroundColor: c.azure50 }]}>
-            <FontAwesome name="map-marker" size={14} color={c.azure600} />
-            <Text style={[styles.quickItemLabel, { color: c.ink700 }]} numberOfLines={1}>
-              {lib.address.city}
-            </Text>
+      {coreLoading ? (
+        <Card style={{ padding: 28, alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <ActivityIndicator color={c.azure500} />
+          <Text style={[textStyles.body, { color: c.ink600, textAlign: 'center' }]}>Loading plan details…</Text>
+        </Card>
+      ) : hasSubscription && data ? (
+        <Card
+          style={{
+            ...styles.heroCard,
+            backgroundColor: c.azure50,
+            borderColor: c.azure100,
+          }}
+        >
+          <View style={styles.heroTop}>
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <Text style={[styles.kicker, { color: c.ink500 }]}>Current plan</Text>
+              <Text style={[type.headline, { color: c.ink900 }]} numberOfLines={2}>
+                {data.planName ?? 'Membership'}
+              </Text>
+            </View>
+            <StatusBadge tone={statusTone(data)} label={statusLabel(data)} />
           </View>
-          <View style={[styles.quickItem, { backgroundColor: c.azure50 }]}>
-            <FontAwesome name="users" size={14} color={c.azure600} />
-            <Text style={[styles.quickItemLabel, { color: c.ink700 }]}>{lib.capacity}+ seats</Text>
-          </View>
-          <View style={[styles.quickItem, { backgroundColor: c.azure50 }]}>
-            <FontAwesome name="clock-o" size={14} color={c.azure600} />
-            <Text style={[styles.quickItemLabel, { color: c.ink700 }]} numberOfLines={1}>
-              {lib.hours.split('·')[0]?.trim() ?? lib.hours}
-            </Text>
-          </View>
-        </View>
-      </Card>
-
-      {hasSubscription ? (
-        <Card style={{ padding: 16 }}>
-          <Text style={[styles.kicker, { color: c.ink500 }]}>Status</Text>
-          <Text style={[styles.value, { color: accent }]}>{data ? statusLabel(data) : '—'}</Text>
-
-          <View style={{ marginTop: 10, gap: 6 }}>
-            <Row label="Plan" value={data?.planName ?? '—'} />
+          <Card style={{ padding: 0, overflow: 'hidden', backgroundColor: c.surface }}>
             {isUpcoming ? (
-              <Row label="Starts" value={formatStartDate(data?.startsAt)} />
+              <DetailRow label="Starts" value={formatStartDate(data.startsAt)} />
             ) : (
               <>
-                <Row label="Expires" value={data?.expiresAt ? new Date(data.expiresAt).toDateString() : '—'} />
-                <Row label="Days left" value={data?.daysLeft != null ? String(data.daysLeft) : '—'} />
+                <DetailRow
+                  label="Valid through"
+                  value={
+                    data.expiresAt
+                      ? new Date(data.expiresAt).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : '—'
+                  }
+                />
+                <DetailRow
+                  label="Days left"
+                  value={data.daysLeft != null ? String(data.daysLeft) : '—'}
+                  last
+                />
               </>
             )}
-          </View>
-
+          </Card>
           {isUpcoming ? (
-            <Text style={[textStyles.body, { color: c.ink600, marginTop: 12, lineHeight: 20 }]}>
-              Your payment is recorded. Access begins on the start date above — your seat is reserved until then.
+            <Text style={[textStyles.body, { color: c.ink600, lineHeight: 20 }]}>
+              Payment recorded. Access begins on the start date — your seat stays reserved until then.
             </Text>
           ) : null}
-
-          <View style={{ marginTop: 16, gap: 10 }}>
+          <View style={{ gap: 10 }}>
             <Button
               title="View available seats"
               variant="secondary"
@@ -248,44 +313,38 @@ export default function StudentMembershipScreen() {
                 router.push({
                   pathname: '/(student)/membership/seat-map',
                   params: {
-                    planId: seatMapPlanIdForMarketingPlan(data?.planMarketingId ?? 'main-hall'),
+                    planId: seatMapPlanIdForMarketingPlan(data.planMarketingId ?? 'main-hall'),
                     preview: '1',
                   },
                 })
               }
             />
-            {data?.renewPlanEligible ? (
-              <>
-                <Button title={renewCtaTitle} onPress={() => router.push('/(student)/membership/plans?intent=renew')} />
-                <Text style={[textStyles.body, { color: c.ink500, lineHeight: 17 }]}>
-                  Extend your current plan or switch plans, then pick a seat if you need a new desk.
-                </Text>
-              </>
+            {data.renewPlanEligible ? (
+              <Button title={renewCtaTitle} onPress={() => router.push('/(student)/membership/plans?intent=renew')} />
             ) : null}
           </View>
         </Card>
-      ) : null}
+      ) : (
+        <Card style={{ padding: 16, gap: 10 }}>
+          <Text style={[type.headline, { color: c.ink900 }]}>No active membership</Text>
+          <Text style={[textStyles.body, { color: c.ink600, lineHeight: 20 }]}>
+            Choose a plan and seat to start studying at {lib.name}.
+          </Text>
+          <Button title="Buy membership" onPress={() => router.push('/(student)/membership/plans?intent=buy')} />
+        </Card>
+      )}
 
       {seatBlock}
+
+      {paymentHistory && paymentHistory.length > 0 ? (
+        <>
+          <StudentSectionLabel title="Payment history" />
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            <PaymentHistoryList rows={paymentHistory} />
+          </Card>
+        </>
+      ) : null}
     </Screen>
-  );
-}
-
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  const scheme = useColorScheme() ?? 'light';
-  const c = Colors[scheme];
-
-  return (
-    <View style={styles.row}>
-      <Text style={[styles.rowLabel, { color: c.ink500 }]}>{label}</Text>
-      <Text
-        style={[styles.rowValue, { color: c.ink900 }, mono && styles.rowMono]}
-        numberOfLines={3}
-        selectable={mono}
-      >
-        {value}
-      </Text>
-    </View>
   );
 }
 
@@ -306,6 +365,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  pendingTitle: { fontSize: 15, fontWeight: '700' },
 
   signedOutHint: {
     alignItems: 'center',
@@ -333,46 +393,17 @@ const styles = StyleSheet.create({
   heroCard: {
     padding: 16,
     marginBottom: 12,
-    gap: 2,
+    gap: 14,
     borderWidth: 1,
     borderRadius: 16,
   },
-  heroStatus: {
-    marginTop: 4,
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-
-  quickContext: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    borderRadius: 16,
-  },
-  quickContextInner: {
+  heroTop: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  quickItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  quickItemLabel: { fontSize: 12, fontWeight: '700' },
-
   kicker: { fontSize: 10, fontWeight: '600', letterSpacing: 1.4, textTransform: 'uppercase' },
-  value: { marginTop: 6, fontSize: 16, fontWeight: '600' },
-  row: { flexDirection: 'column', alignItems: 'flex-start', gap: 4, paddingVertical: 8 },
-  rowLabel: { fontSize: 12, fontWeight: '600' },
-  rowValue: { fontSize: 14, fontWeight: '600', textAlign: 'left', alignSelf: 'stretch' },
-  rowMono: { fontFamily: CLARITY_MONO.fontFamily },
   seatBanner: { paddingHorizontal: 16, paddingVertical: 18, borderBottomWidth: 1 },
   seatBannerLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
   seatNo: { marginTop: 8, fontSize: 28, fontWeight: '700', letterSpacing: -0.5 },

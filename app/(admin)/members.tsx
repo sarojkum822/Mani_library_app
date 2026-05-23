@@ -158,7 +158,7 @@ export default function AdminMembersScreen() {
         />
         <AdminSegmentedControl segments={segments} value={filter} onChange={setFilter} />
         {revalidating ? (
-          <Text style={{ color: c.ink500, fontSize: 11, fontWeight: '600', textAlign: 'right' }}>Updating…</Text>
+          <Text style={{ color: c.ink400, fontSize: 10, fontWeight: '500', textAlign: 'right' }}>Updating…</Text>
         ) : null}
         {error && !data ? (
           <AdminEmptyState title="Could not load" body={error} actionLabel="Retry" onAction={bumpRefresh} />
@@ -186,7 +186,7 @@ export default function AdminMembersScreen() {
   );
 
   return (
-    <View style={[styles.root, { backgroundColor: c.surfaceMuted }]}>
+    <View style={styles.root}>
       {token ? (
         <>
           <CreateMemberSheet

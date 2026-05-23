@@ -3,7 +3,9 @@ import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 import {
   adminCardChrome,
+  CLARITY_BODY_SM,
   CLARITY_HINT_META,
+  CLARITY_METRIC_LABEL,
   CLARITY_SECTION_TITLE,
   useAdminPalette,
 } from '@/components/admin/clarityTokens';
@@ -15,6 +17,8 @@ type Props = {
   children: React.ReactNode;
   paddedBody?: boolean;
   accent?: 'default' | 'warning';
+  /** `metric` = web card intro (ink-500 caps + ink-600 body). */
+  headerVariant?: 'title' | 'metric';
   style?: ViewStyle;
 };
 
@@ -26,6 +30,7 @@ export function AdminSectionCard({
   children,
   paddedBody = true,
   accent = 'default',
+  headerVariant = 'title',
   style,
 }: Props) {
   const c = useAdminPalette();
@@ -42,9 +47,24 @@ export function AdminSectionCard({
     <View style={[styles.wrap, chrome, style]}>
       <View style={[styles.head, { borderBottomColor: c.border }]}>
         <View style={styles.headText}>
-          <Text style={[styles.title, CLARITY_SECTION_TITLE, { color: c.ink900 }]}>{title}</Text>
+          <Text
+            style={[
+              styles.title,
+              headerVariant === 'metric' ? CLARITY_METRIC_LABEL : CLARITY_SECTION_TITLE,
+              { color: headerVariant === 'metric' ? c.ink500 : c.ink900 },
+            ]}
+          >
+            {headerVariant === 'metric' ? title.toUpperCase() : title}
+          </Text>
           {description ? (
-            <Text style={[CLARITY_HINT_META, styles.desc, { color: c.ink600 }]} numberOfLines={4}>
+            <Text
+              style={[
+                headerVariant === 'metric' ? CLARITY_BODY_SM : CLARITY_HINT_META,
+                styles.desc,
+                { color: c.ink600 },
+              ]}
+              numberOfLines={4}
+            >
               {description}
             </Text>
           ) : null}

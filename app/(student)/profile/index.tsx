@@ -16,8 +16,8 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CopyIdButton } from '@/components/admin/CopyIdButton';
 import { CLARITY_BODY, CLARITY_HINT } from '@/components/admin/clarityTokens';
+import { MemberIdCard } from '@/components/student/MemberIdCard';
 import { StudentPageHeader } from '@/components/student/StudentPageHeader';
 import { useLibraryInfo } from '@/components/library/LibraryInfoProvider';
 import { StudentSectionLabel } from '@/components/student/StudentSectionLabel';
@@ -326,19 +326,15 @@ export default function StudentProfileScreen() {
               </View>
 
                   <Text style={[type.headline, styles.displayName, { color: c.ink900 }]}>{displayName}</Text>
-                  <View style={[styles.metaRow, { borderTopColor: c.border }]}>
-                    <View style={styles.metaBlock}>
-                      <Text style={[CLARITY_HINT, { color: c.ink500 }]}>Member ID</Text>
-                      {profileMetaLoading ? (
-                        <ActivityIndicator color={c.azure500} style={{ marginTop: 6, alignSelf: 'flex-start' }} />
-                      ) : (
-                        <CopyIdButton value={deviceId === '—' ? '' : deviceId} label="Copy ID" />
-                      )}
-                    </View>
-                    <View style={styles.metaBlock}>
+                  <View style={styles.metaBlock}>
+                    <MemberIdCard
+                      deviceId={deviceId === '—' ? '' : deviceId}
+                      loading={profileMetaLoading}
+                    />
+                    <View style={[styles.verifyRow, { borderTopColor: c.ink100 }]}>
                       <Text style={[CLARITY_HINT, { color: c.ink500 }]}>ID verification</Text>
                       {verificationMetaLoading ? (
-                        <ActivityIndicator color={c.azure500} style={{ marginTop: 6, alignSelf: 'flex-start' }} />
+                        <ActivityIndicator color={c.azure500} />
                       ) : (
                         <StatusBadge
                           tone={verificationToneForProfile(verificationStatus, kycSlots)}
@@ -383,6 +379,13 @@ export default function StudentProfileScreen() {
               title="Documents & verification"
               subtitle="Aadhaar and student ID"
               onPress={() => router.push('/(student)/profile/doc')}
+              showSeparator
+            />
+            <SettingsRow
+              iconIon="star-outline"
+              title="Feedback"
+              subtitle="Rate the library (verified members)"
+              onPress={() => router.push('/(student)/profile/feedback')}
               showSeparator
             />
             <SettingsRow
@@ -469,17 +472,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     alignSelf: 'center',
   },
-  metaRow: {
-    marginTop: 16,
-    paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 14,
-    width: '100%',
-  },
   metaBlock: {
+    marginTop: 16,
+    width: '100%',
+    gap: 0,
+  },
+  verifyRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
 });

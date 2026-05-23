@@ -24,7 +24,7 @@ import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { api } from '@/lib/api';
+import { api, type AdminRecentPunch } from '@/lib/api';
 import { isoToDMY, deviceUserIdToEmpcode, todayIsoYmd } from '@/lib/adminDates';
 import { DEVICE_USER_ID_LABEL } from '@/lib/deviceUserIdLabel';
 import {
@@ -47,6 +47,7 @@ export default function AdminAttendanceScreen() {
   const token = auth.status === 'signed_in' ? auth.token : null;
 
   const [rows, setRows] = useState<PunchRecord[]>([]);
+  const [recentPunches, setRecentPunches] = useState<AdminRecentPunch[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [libraryQuery, setLibraryQuery] = useState('');
@@ -67,11 +68,20 @@ export default function AdminAttendanceScreen() {
       const toDate = isoToDMY(appliedRange.toIso);
       const trimmed = appliedLibrary.trim();
       const empcode = trimmed ? deviceUserIdToEmpcode(trimmed) : undefined;
-      const list = await api.adminDailyAttendance(token, { fromDate, toDate, empcode });
+      const [list, recent] = await Promise.all([
+        api.adminDailyAttendance(token, { fromDate, toDate, empcode }),
+        api.adminLastPunches(token, {
+          fromYmd: appliedRange.fromIso,
+          toYmd: appliedRange.toIso,
+          empcode,
+        }),
+      ]);
       setRows(sortRecordsByDate(list));
+      setRecentPunches(recent);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Could not load attendance.');
       setRows([]);
+      setRecentPunches([]);
     } finally {
       setLoading(false);
     }
@@ -155,6 +165,30 @@ export default function AdminAttendanceScreen() {
           <AdminMetricTile label="Rows" value={String(rows.length)} hint="Punch rows in range" />
         </View>
 
+        <View style={[styles.recentBlock, { borderColor: c.border, backgroundColor: c.surface }]}>
+          <Text style={[styles.recentTitle, { color: c.ink900 }]}>Recent check-ins</Text>
+          {recentPunches.length === 0 ? (
+            <Text style={[styles.recentEmpty, { color: c.ink500 }]}>
+              {loading ? 'Loading…' : 'No recent check-ins.'}
+            </Text>
+          ) : (
+            recentPunches.slice(0, 20).map((r, i) => (
+              <AdminListRow
+                key={`${r.empcode}-${r.punchDate}-${i}`}
+                last={i === Math.min(recentPunches.length, 20) - 1}
+                title={r.fullName ?? r.empcode}
+                subtitle={`${r.punchDate}${r.deviceUserId != null ? ` · ID ${String(r.deviceUserId).padStart(4, '0')}` : ''}`}
+                right={
+                  r.flag ? (
+                    <Text style={[styles.recentFlag, { color: c.ink600 }]}>{r.flag}</Text>
+                  ) : undefined
+                }
+                showChevron={false}
+              />
+            ))
+          )}
+        </View>
+
         {err ? (
           <AdminEmptyState title="Could not load" body={err} actionLabel="Retry" onAction={() => void load()} />
         ) : null}
@@ -180,11 +214,13 @@ export default function AdminAttendanceScreen() {
       loading,
       present,
       rows.length,
+      recentPunches,
+      c.surface,
     ],
   );
 
   return (
-    <View style={[styles.root, { backgroundColor: c.surfaceMuted }]}>
+    <View style={styles.root}>
       <SectionList
         sections={sections}
         keyExtractor={(r) => `${r.DateString}-${r.Empcode}-${r.INTime}`}
@@ -282,4 +318,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cardSectionFirst: { marginTop: 0 },
+  recentBlock: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    paddingTop: 4,
+  },
+  recentTitle: { fontSize: 15, fontWeight: '700', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 },
+  recentEmpty: { fontSize: 13, paddingHorizontal: 14, paddingVertical: 16 },
+  recentFlag: { fontSize: 11, fontWeight: '600' },
 });

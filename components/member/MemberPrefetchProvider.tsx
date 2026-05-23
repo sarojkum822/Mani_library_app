@@ -24,10 +24,7 @@ import { cacheKeys, getDataCache, invalidateDataCacheKey, setDataCache } from '@
 type Phase = 'idle' | 'loading' | 'ready';
 
 type MemberPrefetchContextValue = {
-  /**
-   * Membership + payment history resolved (or failed). Use this to unblock Membership / Transactions /
-   * Home ribbons — does not wait on profile, documents, or attendance.
-   */
+  /** True once signed-in student may use member screens (shell-first; does not wait on API). */
   accountReady: boolean;
   /** Full prefetch finished (includes attendance for the Attendance tab). */
   ready: boolean;
@@ -198,14 +195,13 @@ export function MemberPrefetchProvider({ children }: { children: React.ReactNode
     warmMemberCoreAccount(token);
     warmMemberProfile(token);
 
+    setAccountReady(true);
+
     const peek = peekWarmMemberCore(token);
     if (peek) {
       setMembership(peek.membership);
       setPayments(peek.payments);
       setPrefetchError(peek.prefetchError);
-      setAccountReady(true);
-    } else {
-      setAccountReady(false);
     }
 
     setPhase('loading');
@@ -287,7 +283,7 @@ export function MemberPrefetchProvider({ children }: { children: React.ReactNode
     () => ({
       accountReady,
       ready: phase === 'ready',
-      loading: !accountReady && (phase === 'loading' || (phase === 'idle' && !!token && isStudent)),
+      loading: isStudent && (phase === 'loading' || (phase === 'idle' && !!token)),
       profileLoading,
       membership,
       payments,

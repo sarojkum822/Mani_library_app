@@ -70,10 +70,12 @@ export function AdminSidebar({
   const workspace = useMemo(() => ADMIN_NAV.filter((i) => i.section === 'workspace'), []);
   const settings = useMemo(() => ADMIN_NAV.filter((i) => i.section === 'settings'), []);
 
+  const glassSurface = 'rgba(255, 255, 255, 0.78)';
+  const glassBorder = 'rgba(1, 96, 208, 0.1)';
   const shellStyle =
     variant === 'sheet'
-      ? [styles.asideSheet, { borderBottomColor: c.border, backgroundColor: c.surface }]
-      : [styles.aside, { borderRightColor: c.border, backgroundColor: c.surface }, compact && styles.asideCompact];
+      ? [styles.asideSheet, { borderBottomColor: glassBorder, backgroundColor: glassSurface }]
+      : [styles.aside, { borderRightColor: glassBorder, backgroundColor: glassSurface }, compact && styles.asideCompact];
 
   const navInnerPad = variant === 'sheet' ? styles.navInnerSheet : styles.navInner;
 

@@ -7,8 +7,15 @@ import { StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
 
 import Colors from '@/constants/Colors';
 import { FONT_MONO, FONT_SANS } from '@/constants/Fonts';
+import {
+  adminGlassCardChrome,
+  adminGlassSearchChrome,
+  type AdminGlassAccent,
+} from '@/components/admin/adminGlassTheme';
 import { cardElevation } from '@/lib/platformStyles';
 import { useColorScheme } from '@/components/useColorScheme';
+
+export type { AdminGlassAccent };
 
 /** Card radius (rounded-2xl ≈ 16px). */
 export const CLARITY_CARD_RADIUS = 16;
@@ -42,8 +49,8 @@ export const CLARITY_METRIC_LABEL: TextStyle = {
 /** Large KPI / money values — tabular, -0.03em tracking. */
 export const CLARITY_KPI_VALUE: TextStyle = {
   fontFamily: FONT_SANS.bold,
-  fontSize: 28,
-  letterSpacing: -0.84,
+  fontSize: 30,
+  letterSpacing: -0.9,
   fontVariant: ['tabular-nums'],
 };
 
@@ -59,77 +66,98 @@ export function clarityPageTitle(size: number): TextStyle {
 /** Section titles inside cards — 14–16px semibold. */
 export const CLARITY_SECTION_TITLE: TextStyle = {
   fontFamily: FONT_SANS.semibold,
-  fontSize: 16,
+  fontSize: 17,
   letterSpacing: -0.2,
 };
 
-/** Body copy — 14–15px regular. */
+/** Body copy — 15–16px regular. */
 export const CLARITY_BODY: TextStyle = {
+  fontFamily: FONT_SANS.regular,
+  fontSize: 16,
+  lineHeight: 24,
+};
+
+export const CLARITY_BODY_SM: TextStyle = {
   fontFamily: FONT_SANS.regular,
   fontSize: 15,
   lineHeight: 22,
 };
 
-export const CLARITY_BODY_SM: TextStyle = {
+/** Hint / meta — 12–14px. */
+export const CLARITY_HINT: TextStyle = {
   fontFamily: FONT_SANS.regular,
+  fontSize: 13,
+  lineHeight: 18,
+};
+
+export const CLARITY_HINT_META: TextStyle = {
+  fontFamily: FONT_SANS.medium,
   fontSize: 14,
   lineHeight: 20,
 };
 
-/** Hint / meta — 11–13px. */
-export const CLARITY_HINT: TextStyle = {
+/** Tertiary KPI / card lines. */
+export const CLARITY_HINT_MUTED: TextStyle = {
   fontFamily: FONT_SANS.regular,
   fontSize: 12,
   lineHeight: 16,
 };
 
-export const CLARITY_HINT_META: TextStyle = {
+/** Inline actions — matches web `text-xs font-medium text-azure-600`. */
+export const CLARITY_LINK: TextStyle = {
   fontFamily: FONT_SANS.medium,
   fontSize: 13,
-  lineHeight: 18,
 };
+
+export type AdminKpiValueTone = 'neutral' | 'success' | 'revenue';
+
+export function adminKpiValueColor(c: AdminPalette, tone: AdminKpiValueTone = 'neutral'): string {
+  if (tone === 'success') return c.emerald800;
+  if (tone === 'revenue') return c.azure800;
+  return c.ink900;
+}
 
 /** Sidebar / nav label. */
 export const CLARITY_NAV_LABEL: TextStyle = {
   fontFamily: FONT_SANS.semibold,
-  fontSize: 14,
+  fontSize: 15,
 };
 
 /** Grouped list primary line. */
 export const CLARITY_LIST_TITLE: TextStyle = {
   fontFamily: FONT_SANS.semibold,
-  fontSize: 16,
+  fontSize: 17,
   letterSpacing: -0.2,
 };
 
 /** Tabular detail column. */
 export const CLARITY_LIST_DETAIL: TextStyle = {
   fontFamily: FONT_SANS.semibold,
-  fontSize: 15,
+  fontSize: 16,
   fontVariant: ['tabular-nums'],
 };
 
 /** Primary / secondary buttons. */
 export const CLARITY_BUTTON_TEXT: TextStyle = {
   fontFamily: FONT_SANS.semibold,
-  fontSize: 15,
+  fontSize: 16,
 };
 
 /** IDs, emails, receipts — JetBrains Mono. */
 export const CLARITY_MONO: TextStyle = {
   fontFamily: FONT_MONO.regular,
-  fontSize: 14,
+  fontSize: 15,
 };
 
 export const CLARITY_MONO_SM: TextStyle = {
   fontFamily: FONT_MONO.semibold,
-  fontSize: 11,
-  lineHeight: 16,
+  fontSize: 12,
+  lineHeight: 17,
 };
 
 export const CLARITY_MONO_KPI: TextStyle = {
   fontFamily: FONT_MONO.bold,
-  fontSize: 15,
+  fontSize: 16,
   letterSpacing: 0.3,
 };
 
@@ -140,15 +168,9 @@ export function useAdminPalette(): AdminPalette {
   return Colors[scheme];
 }
 
-/** White card: hairline border + brand shadow (iOS shadow + Android elevation). */
-export function adminCardChrome(c: AdminPalette): ViewStyle {
-  return {
-    backgroundColor: c.surface,
-    borderColor: c.border,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: CLARITY_CARD_RADIUS,
-    ...cardElevation(),
-  };
+/** Frosted glass card — minimal azure tint (professional, not flat B&W). */
+export function adminCardChrome(c: AdminPalette, accent: AdminGlassAccent = 'default'): ViewStyle {
+  return adminGlassCardChrome(c, accent);
 }
 
 /** Chart wells, nested panels. */
@@ -163,12 +185,7 @@ export function adminSunkenChrome(c: AdminPalette): ViewStyle {
 
 /** Search affordance — muted fill + hairline. */
 export function adminSearchChrome(c: AdminPalette): ViewStyle {
-  return {
-    backgroundColor: c.surfaceMuted,
-    borderColor: c.border,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: CLARITY_INPUT_RADIUS,
-  };
+  return adminGlassSearchChrome(c);
 }
 
 /** Empty / placeholder panels — dashed border. */

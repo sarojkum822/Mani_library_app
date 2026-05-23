@@ -29,8 +29,10 @@ import { Button } from '@/components/ui/Button';
 import { TextField } from '@/components/ui/TextField';
 import libraryInfo from '@/data/libraryInfo.json';
 import { api } from '@/lib/api';
+import { IndianPhoneField } from '@/components/ui/IndianPhoneField';
 import { FIELD_LIMITS } from '@/lib/fieldLimits';
 import { formatPersonName } from '@/lib/formatPersonName';
+import { normalizeIndianMobile10 } from '@/lib/indianPhone';
 import { loadPendingSignup, savePendingSignup, startSignupEmailCooldown } from '@/lib/signupVerification';
 import { forgotPasswordUrl } from '@/lib/siteUrls';
 
@@ -91,7 +93,7 @@ export default function LoginScreen() {
   const canSignUp = useMemo(() => {
     if (name.trim().length < 2) return false;
     if (!email.includes('@')) return false;
-    if (phone.trim().length < 8) return false;
+    if (!normalizeIndianMobile10(phone)) return false;
     if (password.length < FIELD_LIMITS.passwordMin) return false;
     if (password.length > FIELD_LIMITS.passwordMax) return false;
     return password === confirmPassword;
@@ -110,7 +112,7 @@ export default function LoginScreen() {
       const res = await api.signUp({
         name: formattedName,
         email: email.trim(),
-        phone: phone.trim(),
+        phone: normalizeIndianMobile10(phone) ?? '',
         password,
       });
       if (res.token && res.user) {
@@ -269,15 +271,7 @@ export default function LoginScreen() {
                       autoCapitalize="none"
                       maxLength={FIELD_LIMITS.emailMax}
                     />
-                    <TextField
-                      variant="auth"
-                      label="Phone"
-                      value={phone}
-                      onChangeText={setPhone}
-                      placeholder="+91 ..."
-                      keyboardType="phone-pad"
-                      maxLength={FIELD_LIMITS.phoneMax}
-                    />
+                    <IndianPhoneField value={phone} onChangeText={setPhone} />
                     <AuthPasswordField
                       value={password}
                       onChangeText={setPassword}

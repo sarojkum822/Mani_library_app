@@ -285,12 +285,6 @@ export default function StudentDocScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, afterSeat]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (token) void refresh({ silent: true });
-    }, [token, refresh]),
-  );
-
   async function pickAndUpload(opts: {
     rowKey: string;
     uploadType: DocumentType;

@@ -4,15 +4,16 @@
 
 import { FONT_SANS } from '@/constants/Fonts';
 
+/** +1px readable scale (body 16, screen title 22). */
 export const type = {
-  display: { fontFamily: FONT_SANS.bold, fontSize: 34, lineHeight: 40 },
-  screenTitle: { fontFamily: FONT_SANS.semibold, fontSize: 20, lineHeight: 26 },
-  subtitle: { fontFamily: FONT_SANS.medium, fontSize: 14, lineHeight: 20 },
-  headline: { fontFamily: FONT_SANS.semibold, fontSize: 18, lineHeight: 24 },
-  body: { fontFamily: FONT_SANS.regular, fontSize: 15, lineHeight: 22 },
-  bodyMedium: { fontFamily: FONT_SANS.medium, fontSize: 15, lineHeight: 22 },
-  caption: { fontFamily: FONT_SANS.medium, fontSize: 13, lineHeight: 18 },
-  mini: { fontFamily: FONT_SANS.medium, fontSize: 12, lineHeight: 17 },
+  display: { fontFamily: FONT_SANS.bold, fontSize: 36, lineHeight: 44 },
+  screenTitle: { fontFamily: FONT_SANS.semibold, fontSize: 22, lineHeight: 28 },
+  subtitle: { fontFamily: FONT_SANS.medium, fontSize: 15, lineHeight: 21 },
+  headline: { fontFamily: FONT_SANS.semibold, fontSize: 19, lineHeight: 26 },
+  body: { fontFamily: FONT_SANS.regular, fontSize: 16, lineHeight: 24 },
+  bodyMedium: { fontFamily: FONT_SANS.medium, fontSize: 16, lineHeight: 24 },
+  caption: { fontFamily: FONT_SANS.medium, fontSize: 14, lineHeight: 20 },
+  mini: { fontFamily: FONT_SANS.medium, fontSize: 13, lineHeight: 18 },
 } as const;
 
 export const rhythm = {

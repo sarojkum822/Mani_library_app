@@ -120,7 +120,7 @@ export default function AdminPaymentsScreen() {
 
   return (
     <ScrollView
-      style={[styles.root, { backgroundColor: c.surfaceMuted }]}
+      style={styles.root}
       contentContainerStyle={adminScrollContentInsets(insets.bottom)}
       showsVerticalScrollIndicator={false}
       refreshControl={
@@ -137,7 +137,7 @@ export default function AdminPaymentsScreen() {
         description="Charges and checkout status — tap a row for member details."
       />
       {revalidating ? (
-        <Text style={{ color: c.ink500, marginBottom: 8, fontSize: 11, fontWeight: '600', textAlign: 'right' }}>
+        <Text style={{ color: c.ink400, marginBottom: 8, fontSize: 10, fontWeight: '500', textAlign: 'right' }}>
           Updating…
         </Text>
       ) : null}
@@ -154,11 +154,13 @@ export default function AdminPaymentsScreen() {
               label="Revenue · 30 days"
               value={formatCurrency(lib, stats.revenue30dInr)}
               hint={`${stats.paidCount30d} paid`}
+              valueTone="revenue"
             />
             <AdminMetricTile
               label="Today"
               value={formatCurrency(lib, stats.revenueTodayInr)}
               hint={`${stats.paidCountToday} payments`}
+              valueTone="neutral"
             />
             <AdminMetricTile label="All-time paid" value={formatCurrency(lib, stats.totalPaidRevenueInr)} />
             <AdminMetricTile label="Pending" value={String(stats.pendingPayments)} hint="Awaiting capture" />

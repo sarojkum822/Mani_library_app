@@ -1,0 +1,1 @@
+export const FEEDBACK_COMMENT_MAX = 1000;

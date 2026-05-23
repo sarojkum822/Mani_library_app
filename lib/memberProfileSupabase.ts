@@ -9,6 +9,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 import { displayPersonName } from '@/lib/formatPersonName';
+import { normalizeMemberContact, phoneFromProfileDb } from '@/lib/memberContact';
 import { getSupabasePublicConfig } from '@/lib/supabaseConfig';
 import {
   buildMemberKycSlotSummaries,
@@ -236,12 +237,17 @@ export async function tryMemberProfileFromSupabase(accessToken: string): Promise
   const deviceUserId = parseDeviceUserIdRaw((prof as { device_user_id?: unknown }).device_user_id);
   const libraryNumber = deviceUserId !== null ? String(deviceUserId).padStart(4, '0') : '—';
 
+  const contact = normalizeMemberContact(
+    (prof as { email?: string | null }).email,
+    phoneFromProfileDb((prof as { phone?: unknown }).phone),
+  );
+
   return {
     id: uid,
     role,
     name: displayPersonName((prof as { full_name?: string }).full_name, 'Member'),
-    email: ((prof as { email?: string | null }).email as string | null) ?? undefined,
-    phone: ((prof as { phone?: string | null }).phone as string | null) ?? undefined,
+    email: contact.email,
+    phone: contact.phone,
     deviceUserId,
     libraryNumber,
     avatarUrl: ((prof as { avatar_url?: string | null }).avatar_url as string | null) ?? null,

@@ -4,6 +4,7 @@ import { CLARITY_MONO } from '@/components/admin/clarityTokens';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge';
+import { normalizeMemberContact } from '@/lib/memberContact';
 
 const INSTITUTION_LABELS: Record<string, string> = {
   school: 'School',
@@ -17,12 +18,10 @@ export function resolveMemberContact(
   profile: { phone?: string; email?: string } | null | undefined,
   user: { phone?: string; email?: string } | null | undefined,
 ): { phone: string; email: string } {
-  let phone = profile?.phone?.trim() || user?.phone?.trim() || '';
-  let email = profile?.email?.trim() || user?.email?.trim() || '';
-  if (phone.includes('@')) {
-    if (!email) email = phone;
-    phone = '';
-  }
+  const fromProfile = normalizeMemberContact(profile?.email, profile?.phone);
+  const fromUser = normalizeMemberContact(user?.email, user?.phone);
+  const email = fromProfile.email || fromUser.email || '';
+  const phone = fromProfile.phone || fromUser.phone || '';
   return { phone: phone || '—', email: email || '—' };
 }
 

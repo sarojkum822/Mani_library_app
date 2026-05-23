@@ -60,7 +60,7 @@ export default function AdminSearchScreen() {
   }, [all, q]);
 
   return (
-    <View style={[styles.root, { backgroundColor: c.surfaceMuted }]}>
+    <View style={styles.root}>
       <FlatList
         data={filtered}
         keyExtractor={(m) => m.listKey}

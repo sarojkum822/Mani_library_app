@@ -20,8 +20,10 @@ import type { LibraryInfoJson } from '@/lib/libraryInfoTypes';
 import { BrandLogo } from '@/components/BrandLogo';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { PublicGallerySection } from '@/components/public/PublicGallerySection';
+import { TestimonialsSection } from '@/components/public/TestimonialsSection';
 
-type SectionKey = 'facilities' | 'about' | 'plans' | 'contact';
+type SectionKey = 'facilities' | 'about' | 'plans' | 'gallery' | 'testimonials' | 'contact';
 
 type LibraryPlan = LibraryInfoJson['plans'][number];
 
@@ -54,13 +56,14 @@ export function LandingScreen() {
   const { auth } = useAuth();
   const mp = useMemberPrefetch();
   const isStudentSignedIn = auth.status === 'signed_in' && auth.user.role === 'student';
+  const isAdminSignedIn = auth.status === 'signed_in' && auth.user.role === 'admin';
 
   const membershipStatus: MembershipStatus | null =
-    !isStudentSignedIn ? null : !mp.accountReady ? null : mp.membership?.status ?? null;
+    !isStudentSignedIn ? null : mp.loading ? null : mp.membership?.status ?? null;
   const memberHasActivePlan =
-    isStudentSignedIn && mp.accountReady && hasActiveMembership(mp.membership);
+    isStudentSignedIn && !mp.loading && hasActiveMembership(mp.membership);
   const membershipHistoryCount =
-    !isStudentSignedIn ? null : !mp.accountReady ? null : mp.payments?.length ?? null;
+    !isStudentSignedIn ? null : mp.loading ? null : mp.payments?.length ?? null;
 
   const isFirstTimeJoin =
     isStudentSignedIn &&
@@ -138,7 +141,19 @@ export function LandingScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: c.surface }} edges={['top', 'left', 'right']}>
       <View style={[styles.nav, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <BrandLogo variant="full" height={30} />
-        {isStudentSignedIn ? (
+        {isAdminSignedIn ? (
+          <Pressable
+            onPress={() => router.push('/(admin)')}
+            style={({ pressed }) => [
+              styles.navAccount,
+              { borderColor: c.border, backgroundColor: c.surfaceMuted },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Text style={[styles.navAccountLabel, { color: c.ink900 }]}>Staff dashboard</Text>
+            <FontAwesome name="chevron-right" size={12} color={c.ink400} />
+          </Pressable>
+        ) : isStudentSignedIn ? (
           <Pressable
             onPress={openStudentProfileHub}
             style={({ pressed }) => [
@@ -180,11 +195,7 @@ export function LandingScreen() {
             Guest mode — scroll to membership plans below, or sign in for attendance and your account.
           </Text>
         </View>
-      ) : !mp.accountReady ? (
-        <View style={[styles.guestRibbon, { backgroundColor: c.surfaceMuted, borderBottomColor: c.border }]}>
-          <Text style={[styles.guestRibbonText, { color: c.ink600 }]}>Loading your account…</Text>
-        </View>
-      ) : isFirstTimeJoin ? (
+      ) : mp.loading ? null : isFirstTimeJoin ? (
         <View style={[styles.guestRibbon, { backgroundColor: c.azure50, borderBottomColor: c.azure200 }]}>
           <Text style={[styles.guestRibbonText, { color: c.azure700 }]}>
             Welcome — you have not joined yet. Tap Join now below to pick a plan and choose your seat.
@@ -236,17 +247,23 @@ export function LandingScreen() {
             <View style={{ marginTop: 14, gap: 10, alignSelf: 'stretch', width: '100%' }}>
               <Button
                 title={
-                  !isStudentSignedIn
-                    ? 'Reserve your seat'
-                    : isFirstTimeJoin
-                      ? 'Join now'
-                    : membershipStatus === 'none'
-                      ? 'Complete membership'
-                      : membershipStatus === null
-                        ? 'Membership'
-                        : 'My membership'
+                  isAdminSignedIn
+                    ? 'Go to dashboard'
+                    : !isStudentSignedIn
+                      ? 'Reserve your seat'
+                      : isFirstTimeJoin
+                        ? 'Join now'
+                        : membershipStatus === 'none'
+                          ? 'Complete membership'
+                          : membershipStatus === null
+                            ? 'Membership'
+                            : 'My membership'
                 }
                 onPress={() => {
+                  if (isAdminSignedIn) {
+                    router.push('/(admin)');
+                    return;
+                  }
                   if (!isStudentSignedIn) {
                     router.push('/(auth)/login');
                     return;
@@ -428,6 +445,30 @@ export function LandingScreen() {
               />
             ))}
           </View>
+        </View>
+
+        <View
+          onLayout={onSectionLayout('gallery')}
+          style={{ paddingHorizontal: 16, paddingTop: rhythm.sectionTop, backgroundColor: c.surface }}
+        >
+          <Text style={[styles.kicker, { color: c.azure500 }]}>Gallery</Text>
+          <Text style={[styles.h2, { color: c.ink900 }]}>Life at the library</Text>
+          <Text style={[styles.sectionP, { color: c.ink600, marginBottom: 12 }]}>
+            Photos from our study halls and community.
+          </Text>
+          <PublicGallerySection maxCount={8} />
+        </View>
+
+        <View
+          onLayout={onSectionLayout('testimonials')}
+          style={{ paddingHorizontal: 16, paddingTop: rhythm.sectionTop, backgroundColor: c.surfaceMuted }}
+        >
+          <Text style={[styles.kicker, { color: c.azure500 }]}>Testimonials</Text>
+          <Text style={[styles.h2, { color: c.ink900 }]}>What members say</Text>
+          <Text style={[styles.sectionP, { color: c.ink600, marginBottom: 12 }]}>
+            Approved feedback from verified members.
+          </Text>
+          <TestimonialsSection />
         </View>
 
         <View onLayout={onSectionLayout('contact')} style={{ backgroundColor: c.surfaceMuted }}>

@@ -76,9 +76,9 @@ export const spacing = {
 
 export const textStyles = StyleSheet.create({
   kicker: { fontSize: 10, fontWeight: '600', letterSpacing: 1.4, textTransform: 'uppercase' },
-  body: { fontSize: 13, fontWeight: '500' },
-  label: { fontSize: 12, fontWeight: '500' },
-  value: { fontSize: 16, fontWeight: '600' },
+  body: { fontSize: 14, fontWeight: '500' },
+  label: { fontSize: 13, fontWeight: '500' },
+  value: { fontSize: 17, fontWeight: '600' },
 });
 
 export function shadowCard(): ViewStyle {

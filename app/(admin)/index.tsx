@@ -13,7 +13,7 @@ import { AdminOverviewMetricsRow } from '@/components/admin/AdminOverviewMetrics
 import { AdminListRow } from '@/components/admin/AdminListRow';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { AdminSectionCard } from '@/components/admin/AdminSectionCard';
-import { CLARITY_METRIC_LABEL } from '@/components/admin/clarityTokens';
+import { CLARITY_HINT_MUTED, CLARITY_LINK, CLARITY_METRIC_LABEL } from '@/components/admin/clarityTokens';
 import { adminScrollContentInsets } from '@/components/admin/layoutTokens';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useLibraryInfo } from '@/components/library/LibraryInfoProvider';
@@ -118,7 +118,7 @@ export default function AdminDashboard() {
 
   return (
     <ScrollView
-      style={[styles.root, { backgroundColor: c.surfaceMuted }]}
+      style={styles.root}
       contentContainerStyle={adminScrollContentInsets(insets.bottom)}
       showsVerticalScrollIndicator={false}
       refreshControl={
@@ -126,11 +126,11 @@ export default function AdminDashboard() {
       }
     >
       {revalidating ? (
-        <Text style={{ color: c.ink500, marginBottom: 8, fontSize: 11, fontWeight: '600', textAlign: 'right' }}>
+        <Text style={{ color: c.ink400, marginBottom: 8, fontSize: 10, fontWeight: '500', textAlign: 'right' }}>
           Updating…
         </Text>
       ) : null}
-      {overviewLoading && !overview ? <AdminKpiSkeleton count={5} /> : null}
+      {overviewLoading && !overview ? <AdminKpiSkeleton count={6} /> : null}
       {overviewErr && !overview ? (
         <Text style={{ color: c.azure700, marginBottom: 12, fontWeight: '500' }}>{overviewErr}</Text>
       ) : null}
@@ -154,25 +154,33 @@ export default function AdminDashboard() {
             label="Active members"
             value={String(activeMembers)}
             hint="Bought a plan · membership active now"
+            valueTone="success"
             icon="users"
           />
           <AdminKpiCard
             label="Active plans"
             value={String(active)}
-            hint={[
-              `${activeLong} long · ${activeShort} short`,
-              `Seats in use: ${seatSnapshot.longTermDistinctSeats} long · ${seatSnapshot.shortTermDistinctSeats} short`,
-              `Roster ${total}${newMem30 > 0 ? ` · +${newMem30} new (30d)` : ''}`,
-            ].join('\n')}
+            hint={`${activeLong} long · ${activeShort} short`}
+            hintMuted={`Seats in use: ${seatSnapshot.longTermDistinctSeats} long · ${seatSnapshot.shortTermDistinctSeats} short`}
+            hintFooter={
+              <Text style={[CLARITY_HINT_MUTED, { color: c.ink400 }]}>
+                Roster {total}
+                {newMem30 > 0 ? (
+                  <>
+                    {' · '}
+                    <Text style={{ color: c.emerald700 }}>+{newMem30}</Text>
+                    {' new (30d)'}
+                  </>
+                ) : null}
+              </Text>
+            }
             icon="refresh"
           />
           <AdminKpiCard
             label="Income · 30 days"
             value={formatCurrency(lib, revenue30d)}
-            hint={[
-              `${stats?.paidCount30d ?? 0} paid charges`,
-              `All-time paid ${formatCurrency(lib, totalPaidAll)}`,
-            ].join('\n')}
+            hint={`${stats?.paidCount30d ?? 0} paid charges`}
+            valueTone="revenue"
             icon="line-chart"
           />
           <AdminKpiCard
@@ -180,6 +188,13 @@ export default function AdminDashboard() {
             value={formatCurrency(lib, revenueToday)}
             hint={`${paidToday} payment${paidToday === 1 ? '' : 's'}`}
             icon="bolt"
+          />
+          <AdminKpiCard
+            label="Total income"
+            value={formatCurrency(lib, totalPaidAll)}
+            hint="All-time paid revenue"
+            valueTone="revenue"
+            icon="inr"
           />
         </AdminOverviewMetricsRow>
       ) : null}
@@ -189,12 +204,13 @@ export default function AdminDashboard() {
       <AdminSectionCard
         title="Subscriptions expiring soon"
         description="Members whose plan ends within the next 7 days."
+        headerVariant="metric"
         paddedBody={false}
         accent={expiring.length > 0 ? 'warning' : 'default'}
         right={
           <Link href="/(admin)/subscriptions" asChild>
             <Pressable hitSlop={8}>
-              <Text style={[styles.link, { color: c.azure500 }]}>View all →</Text>
+              <Text style={[CLARITY_LINK, { color: c.azure600 }]}>View all →</Text>
             </Pressable>
           </Link>
         }
@@ -227,6 +243,7 @@ export default function AdminDashboard() {
       <AdminSectionCard
         title="Today"
         description={`${headlineDate} · ${weekday}`}
+        headerVariant="metric"
         paddedBody={false}
       >
         <View style={styles.todayStats}>
@@ -249,6 +266,7 @@ export default function AdminDashboard() {
       <AdminSectionCard
         title="Today's attendance"
         description={`${presentCount} present · ${absentCount} absent · ${attendancePreview[0]?.DateString ?? '—'}`}
+        headerVariant="metric"
         paddedBody={false}
       >
         {attendancePreview.length === 0 ? (
@@ -275,11 +293,12 @@ export default function AdminDashboard() {
       <AdminSectionCard
         title="Recent payments"
         description="Latest payments from the database."
+        headerVariant="metric"
         paddedBody={false}
         right={
           <Link href="/(admin)/payments" asChild>
             <Pressable hitSlop={8}>
-              <Text style={[styles.link, { color: c.azure500 }]}>View all →</Text>
+              <Text style={[CLARITY_LINK, { color: c.azure600 }]}>View all →</Text>
             </Pressable>
           </Link>
         }
@@ -340,7 +359,6 @@ function GlanceBar({ label, value, pct }: { label: string; value: string; pct: n
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  link: { fontSize: 12, fontWeight: '700' },
   todayStats: {
     flexDirection: 'row',
     gap: 16,

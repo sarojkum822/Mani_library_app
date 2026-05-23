@@ -29,6 +29,8 @@ import { formatPhoneForRazorpayPrefill } from '@/lib/razorpayPrefill';
 import { sanitizeAadhaarLastFourInput, sanitizeRollNumberDigitsInput } from '@/lib/intakeFieldLimits';
 import { MEMBERSHIP_INSTITUTION_VALUES } from '@/lib/membershipInstitutionOptions';
 import { uploadDeferredMembershipKyc } from '@/lib/deferredMembershipKyc';
+import { buildCheckoutFingerprint } from '@/lib/checkoutFingerprint';
+import type { ResumableCheckout } from '@/lib/api';
 
 function normalizeParam(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
@@ -97,6 +99,7 @@ export default function MembershipCheckoutScreen() {
   const seatNumber = seatRaw != null && seatRaw !== '' ? Math.round(Number(seatRaw)) : NaN;
 
   const [profile, setProfile] = useState<MemberProfile | null>(null);
+  const [resumeCheckout, setResumeCheckout] = useState<ResumableCheckout | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -115,6 +118,25 @@ export default function MembershipCheckoutScreen() {
       cancelled = true;
     };
   }, [token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!token || user?.role !== 'student') {
+        if (!cancelled) setResumeCheckout(null);
+        return;
+      }
+      try {
+        const r = await api.resumableCheckout(token);
+        if (!cancelled) setResumeCheckout(r);
+      } catch {
+        if (!cancelled) setResumeCheckout(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, user?.role]);
 
   const durationLabel = useMemo(() => {
     if (!durationKey || !planKind) return '—';
@@ -144,13 +166,41 @@ export default function MembershipCheckoutScreen() {
     setBusy(true);
     let paymentId: string | null = null;
     try {
-      const order = await api.createRazorpayMembershipOrder(token, {
+      const fingerprint = buildCheckoutFingerprint({
         planKind,
         seatNumber,
         membershipStartDate,
         durationKey,
       });
-      paymentId = order.paymentId;
+      const rc = resumeCheckout;
+      const useResume = rc != null && rc.fingerprint === fingerprint;
+
+      let keyId: string;
+      let orderId: string;
+      let amount: number;
+      let currency: string;
+      let hostedCheckoutUrl: string | undefined;
+
+      if (useResume && rc) {
+        keyId = rc.keyId;
+        orderId = rc.orderId;
+        amount = rc.amount;
+        currency = rc.currency;
+        paymentId = rc.paymentId;
+      } else {
+        const order = await api.createRazorpayMembershipOrder(token, {
+          planKind,
+          seatNumber,
+          membershipStartDate,
+          durationKey,
+        });
+        paymentId = order.paymentId;
+        keyId = order.keyId;
+        orderId = order.orderId;
+        amount = order.amount;
+        currency = order.currency;
+        hostedCheckoutUrl = order.hostedCheckoutUrl;
+      }
 
       const prefillEmail = user.email ?? profile?.email;
       const prefillContact =
@@ -158,11 +208,11 @@ export default function MembershipCheckoutScreen() {
 
       const checkoutOptions: Record<string, unknown> = {
         description: `${planTitle(planKind, durationLabel)} · seat ${seatLabel}`,
-        currency: order.currency,
-        key: order.keyId,
-        amount: String(order.amount),
+        currency,
+        key: keyId,
+        amount: String(amount),
         name: 'Mani Library',
-        order_id: order.orderId,
+        order_id: orderId,
         theme: { color: '#0ea5e9' },
         prefill: {
           name: profile?.name ?? user.name ?? 'Member',
@@ -174,8 +224,8 @@ export default function MembershipCheckoutScreen() {
         checkoutOptions.method = 'card';
       }
 
-      if (Platform.OS === 'web' && order.hostedCheckoutUrl) {
-        await Linking.openURL(order.hostedCheckoutUrl);
+      if (Platform.OS === 'web' && hostedCheckoutUrl) {
+        await Linking.openURL(hostedCheckoutUrl);
         setErr('Complete payment in the browser tab, then return to the app and open Membership.');
         return;
       }
@@ -188,7 +238,7 @@ export default function MembershipCheckoutScreen() {
           razorpay_order_id: resp.razorpay_order_id,
           razorpay_payment_id: resp.razorpay_payment_id,
           razorpay_signature: resp.razorpay_signature,
-          payment_id: order.paymentId,
+          payment_id: paymentId,
         });
         settled = true;
       } catch {
@@ -201,7 +251,7 @@ export default function MembershipCheckoutScreen() {
           }
         }
         if (!settled) {
-          const sync = await api.syncPendingRazorpayPayment(token, order.paymentId);
+          const sync = await api.syncPendingRazorpayPayment(token, paymentId);
           if (sync.outcome !== 'paid') {
             throw new Error('Payment could not be confirmed. Try again or contact the desk.');
           }
@@ -234,7 +284,7 @@ export default function MembershipCheckoutScreen() {
       router.replace({
         pathname: '/(student)/membership/payment-success',
         params: {
-          paymentId: order.paymentId,
+          paymentId,
           planTitle: title,
           seatLabel,
           membershipStartDate,
@@ -274,7 +324,25 @@ export default function MembershipCheckoutScreen() {
     );
   }
 
-  if (mp.accountReady && hasActiveMembership(mp.membership)) {
+  if (user?.role === 'admin') {
+    return (
+      <Screen title="Payment" subtitle="Staff accounts cannot pay here." scrollable>
+        <View style={[styles.staffNotice, { borderColor: '#c4b5fd', backgroundColor: '#f5f3ff' }]}>
+          <Text style={[styles.staffKicker, { color: '#6d28d9' }]}>Staff account</Text>
+          <Text style={[textStyles.body, { color: '#4c1d95', lineHeight: 20 }]}>
+            Admins and desk staff cannot pay with Razorpay in the app. Use the dashboard to enroll members and record
+            cash or UPI at the desk.
+          </Text>
+        </View>
+        <View style={{ marginTop: 16, gap: 10 }}>
+          <Button title="Open dashboard" onPress={() => router.replace('/(admin)')} />
+          <Button title="Back" variant="secondary" onPress={() => router.back()} />
+        </View>
+      </Screen>
+    );
+  }
+
+  if (!mp.loading && hasActiveMembership(mp.membership)) {
     const previewPlanId = seatMapPlanIdForMarketingPlan(mp.membership?.planMarketingId ?? planId ?? 'main-hall');
     return (
       <Screen title="Payment unavailable" subtitle="Your current plan is still active." scrollable>
@@ -351,4 +419,6 @@ const styles = StyleSheet.create({
   meta: { fontSize: 14, fontWeight: '500' },
   total: { fontSize: 22, fontWeight: '800', marginTop: 8, fontVariant: ['tabular-nums'] },
   err: { marginTop: 14, fontSize: 14, fontWeight: '600' },
+  staffNotice: { padding: 16, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, gap: 8 },
+  staffKicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
 });
