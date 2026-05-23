@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Modal,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -33,6 +34,8 @@ export default function AdminGalleryScreen() {
   const token = auth.status === 'signed_in' ? auth.token : null;
   const [refreshKey, setRefreshKey] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchGallery = useCallback(async (): Promise<GalleryPayload> => {
     if (!token) throw new Error('Sign in as admin.');
@@ -81,26 +84,22 @@ export default function AdminGalleryScreen() {
     }
   };
 
-  const remove = (id: string) => {
-    if (!token) return;
-    Alert.alert('Remove photo?', 'It will disappear from the public gallery.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await api.adminGalleryDelete(token, id);
-            setRefreshKey((k) => k + 1);
-          } catch (e: unknown) {
-            Alert.alert('Error', e instanceof Error ? e.message : 'Could not delete.');
-          }
-        },
-      },
-    ]);
+  const confirmDelete = async () => {
+    if (!token || !pendingDeleteId) return;
+    setDeleting(true);
+    try {
+      await api.adminGalleryDelete(token, pendingDeleteId);
+      setPendingDeleteId(null);
+      setRefreshKey((k) => k + 1);
+    } catch (e: unknown) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not delete.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
+    <>
     <FlatList
       style={{ flex: 1 }}
       contentContainerStyle={adminScrollContentInsets(insets.bottom)}
@@ -132,12 +131,56 @@ export default function AdminGalleryScreen() {
       renderItem={({ item }) => (
         <View style={[styles.tile, { borderColor: c.ink100, backgroundColor: c.surface }]}>
           <Image source={{ uri: item.url }} style={styles.img} resizeMode="cover" />
-          <Pressable onPress={() => remove(item.id)} style={styles.del}>
+          <Pressable onPress={() => setPendingDeleteId(item.id)} style={styles.del}>
             <Text style={styles.delText}>Delete</Text>
           </Pressable>
         </View>
       )}
     />
+
+    <Modal
+      visible={pendingDeleteId != null}
+      transparent
+      animationType="fade"
+      onRequestClose={() => {
+        if (!deleting) setPendingDeleteId(null);
+      }}
+    >
+      <Pressable
+        style={styles.modalBackdrop}
+        onPress={() => {
+          if (!deleting) setPendingDeleteId(null);
+        }}
+      >
+        <Pressable
+          style={[styles.modalCard, { backgroundColor: c.surface, borderColor: c.border }]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <Text style={[styles.modalTitle, { color: c.ink900 }]}>Delete photo?</Text>
+          <Text style={[styles.modalBody, { color: c.ink600 }]}>
+            This will be removed from the homepage and public gallery. This cannot be undone.
+          </Text>
+          <View style={styles.modalActions}>
+            <Button
+              title="Cancel"
+              variant="secondary"
+              disabled={deleting}
+              onPress={() => setPendingDeleteId(null)}
+              style={styles.modalBtn}
+            />
+            <Button
+              title={deleting ? 'Deleting…' : 'Delete'}
+              variant="primary"
+              disabled={deleting}
+              loading={deleting}
+              onPress={() => void confirmDelete()}
+              style={{ ...styles.modalBtn, backgroundColor: '#b91c1c', borderColor: '#b91c1c' }}
+            />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+    </>
   );
 }
 
@@ -147,4 +190,20 @@ const styles = StyleSheet.create({
   img: { width: '100%', aspectRatio: 4 / 3 },
   del: { padding: 8, alignItems: 'center', backgroundColor: 'rgba(15,23,42,0.06)' },
   delText: { fontSize: 12, fontWeight: '600', color: '#b91c1c' },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.45)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 20,
+    gap: 12,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700' },
+  modalBody: { fontSize: 15, lineHeight: 22 },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  modalBtn: { flex: 1 },
 });

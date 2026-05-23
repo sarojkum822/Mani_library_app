@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import Colors from '@/constants/Colors';
 import { FONT_SANS } from '@/constants/Fonts';
@@ -11,6 +11,9 @@ import {
   readPublicCache,
   writePublicCache,
 } from '@/lib/publicContentCache';
+
+const GAP = 12;
+const SECTION_PAD = 16;
 
 function Stars({ rating, color }: { rating: number; color: string }) {
   return (
@@ -24,6 +27,8 @@ function Stars({ rating, color }: { rating: number; color: string }) {
 export function TestimonialsSection() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
+  const { width } = useWindowDimensions();
+  const cardWidth = Math.min(300, Math.max(260, width * 0.82));
   const [items, setItems] = useState<PublicTestimonial[]>(
     () => readPublicCache<PublicTestimonial[]>(PUBLIC_TESTIMONIALS_CACHE_KEY) ?? [],
   );
@@ -61,25 +66,38 @@ export function TestimonialsSection() {
   }
 
   return (
-    <View style={styles.grid}>
-      {items.slice(0, 6).map((t) => (
-        <Card key={`${t.fullName}-${t.comment.slice(0, 24)}`} style={styles.card}>
-          <Stars rating={t.rating} color="#f59e0b" />
-          <Text style={[styles.quote, { color: c.ink800 }]} numberOfLines={5}>
-            “{t.comment}”
-          </Text>
-          <Text style={[styles.name, { color: c.ink900 }]}>{t.fullName}</Text>
-          <Text style={[styles.sub, { color: c.ink500 }]} numberOfLines={1}>
-            {t.subtitle}
-          </Text>
-        </Card>
-      ))}
+    <View style={styles.wrap}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        decelerationRate="fast"
+        snapToInterval={cardWidth + GAP}
+        snapToAlignment="start"
+        disableIntervalMomentum
+        contentContainerStyle={[styles.row, { paddingHorizontal: SECTION_PAD }]}
+        style={styles.scroll}
+      >
+        {items.map((t, i) => (
+          <Card key={`${t.fullName}-${i}`} style={{ ...styles.card, width: cardWidth }}>
+            <Stars rating={t.rating} color="#f59e0b" />
+            <Text style={[styles.quote, { color: c.ink800 }]} numberOfLines={5}>
+              “{t.comment}”
+            </Text>
+            <Text style={[styles.name, { color: c.ink900 }]}>{t.fullName}</Text>
+            <Text style={[styles.sub, { color: c.ink500 }]} numberOfLines={1}>
+              {t.subtitle}
+            </Text>
+          </Card>
+        ))}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  grid: { gap: 10 },
+  wrap: { marginHorizontal: -SECTION_PAD },
+  scroll: { overflow: 'visible' },
+  row: { gap: GAP, paddingVertical: 4 },
   card: { padding: 14, gap: 6 },
   quote: { fontSize: 14, lineHeight: 20, fontFamily: FONT_SANS.regular, marginTop: 4 },
   name: { fontSize: 13, fontWeight: '600', fontFamily: FONT_SANS.semibold, marginTop: 6 },

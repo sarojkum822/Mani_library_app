@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   SectionList,
@@ -16,16 +15,22 @@ import {
 } from '@/components/admin/AdminDateRangeFilter';
 import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
 import { AdminListRow } from '@/components/admin/AdminListRow';
-import { AdminMetricTile } from '@/components/admin/AdminMetricTile';
-import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
+import { AdminListSkeleton } from '@/components/admin/AdminListSkeleton';
 import { AdminSearchField } from '@/components/admin/AdminSearchField';
 import { adminScrollContentInsets } from '@/components/admin/layoutTokens';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { api, type AdminRecentPunch } from '@/lib/api';
+import { api } from '@/lib/api';
+import {
+  loadAdminAttendancePrefs,
+  loadAttendanceDiskCache,
+  saveAdminAttendancePrefs,
+  saveAttendanceDiskCache,
+} from '@/lib/adminAttendancePrefs';
 import { isoToDMY, deviceUserIdToEmpcode, todayIsoYmd } from '@/lib/adminDates';
+import { cacheKeys, getDataCache, setDataCache } from '@/lib/dataCache';
 import { DEVICE_USER_ID_LABEL } from '@/lib/deviceUserIdLabel';
 import {
   groupRecordsByDate,
@@ -39,6 +44,31 @@ const initialRange = (): AdminDateRange => {
   return { fromIso: today, toIso: today, preset: 'today' };
 };
 
+function StatPill({
+  label,
+  value,
+  accent,
+  loading,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+  loading?: boolean;
+}) {
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
+  return (
+    <View style={[styles.statPill, { backgroundColor: c.surface, borderColor: c.border }]}>
+      {loading ? (
+        <View style={[styles.statValueBone, { backgroundColor: c.ink100 }]} />
+      ) : (
+        <Text style={[styles.statValue, { color: accent ?? c.ink900 }]}>{value}</Text>
+      )}
+      <Text style={[styles.statLabel, { color: c.ink500 }]}>{label}</Text>
+    </View>
+  );
+}
+
 export default function AdminAttendanceScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
@@ -46,187 +76,212 @@ export default function AdminAttendanceScreen() {
   const { auth } = useAuth();
   const token = auth.status === 'signed_in' ? auth.token : null;
 
+  const [prefsReady, setPrefsReady] = useState(false);
   const [rows, setRows] = useState<PunchRecord[]>([]);
-  const [recentPunches, setRecentPunches] = useState<AdminRecentPunch[]>([]);
   const [loading, setLoading] = useState(false);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [libraryQuery, setLibraryQuery] = useState('');
   const [appliedLibrary, setAppliedLibrary] = useState('');
   const [draftRange, setDraftRange] = useState<AdminDateRange>(initialRange);
   const [appliedRange, setAppliedRange] = useState<AdminDateRange>(initialRange);
 
-  const load = useCallback(async () => {
-    if (!token) {
-      setRows([]);
-      setErr('Sign in as admin to load attendance.');
-      return;
-    }
-    setLoading(true);
-    setErr(null);
-    try {
-      const fromDate = isoToDMY(appliedRange.fromIso);
-      const toDate = isoToDMY(appliedRange.toIso);
-      const trimmed = appliedLibrary.trim();
-      const empcode = trimmed ? deviceUserIdToEmpcode(trimmed) : undefined;
-      const [list, recent] = await Promise.all([
-        api.adminDailyAttendance(token, { fromDate, toDate, empcode }),
-        api.adminLastPunches(token, {
-          fromYmd: appliedRange.fromIso,
-          toYmd: appliedRange.toIso,
-          empcode,
-        }),
-      ]);
-      setRows(sortRecordsByDate(list));
-      setRecentPunches(recent);
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : 'Could not load attendance.');
-      setRows([]);
-      setRecentPunches([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [token, appliedLibrary, appliedRange.fromIso, appliedRange.toIso]);
-
-  const handleRangeChange = useCallback((next: AdminDateRange) => {
-    setDraftRange(next);
-    if (next.preset !== 'custom') {
-      setAppliedRange(next);
-    }
-  }, []);
-
-  const applyDates = useCallback(() => {
-    setAppliedRange(draftRange);
-  }, [draftRange]);
+  const appliedLibraryRef = useRef(appliedLibrary);
+  const appliedRangeRef = useRef(appliedRange);
 
   useEffect(() => {
+    appliedLibraryRef.current = appliedLibrary;
+  }, [appliedLibrary]);
+
+  useEffect(() => {
+    appliedRangeRef.current = appliedRange;
+  }, [appliedRange]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const saved = await loadAdminAttendancePrefs();
+      if (cancelled) return;
+      if (saved) {
+        setDraftRange(saved.range);
+        setAppliedRange(saved.range);
+        setLibraryQuery(saved.libraryFilter);
+        setAppliedLibrary(saved.libraryFilter);
+      }
+      setPrefsReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const persistPrefs = useCallback((range: AdminDateRange, libraryFilter: string) => {
+    void saveAdminAttendancePrefs({ range, libraryFilter });
+  }, []);
+
+  const attendanceCacheKey = useCallback((range: AdminDateRange, library: string) => {
+    const emp = library.trim() ? deviceUserIdToEmpcode(library.trim()) : '';
+    return cacheKeys.adminAttendance(range.fromIso, range.toIso, emp);
+  }, []);
+
+  const hydrateFromCache = useCallback(
+    async (key: string): Promise<boolean> => {
+      const mem = getDataCache<PunchRecord[]>(key);
+      if (mem?.length) {
+        setRows(mem);
+        return true;
+      }
+      const disk = await loadAttendanceDiskCache(key);
+      if (disk?.length) {
+        setRows(sortRecordsByDate(disk));
+        setDataCache(key, disk);
+        return true;
+      }
+      return false;
+    },
+    [],
+  );
+
+  const load = useCallback(
+    async (opts?: { pull?: boolean }) => {
+      if (!token) {
+        setRows([]);
+        setErr('Sign in as admin to load attendance.');
+        return;
+      }
+
+      const range = appliedRangeRef.current;
+      const library = appliedLibraryRef.current;
+      const key = attendanceCacheKey(range, library);
+      const hadCache = await hydrateFromCache(key);
+
+      if (opts?.pull) setPullRefreshing(true);
+      else setLoading(true);
+
+      setErr(null);
+
+      try {
+        const fromDate = isoToDMY(range.fromIso);
+        const toDate = isoToDMY(range.toIso);
+        const trimmed = library.trim();
+        const empcode = trimmed ? deviceUserIdToEmpcode(trimmed) : undefined;
+        const list = await api.adminDailyAttendance(token, { fromDate, toDate, empcode });
+        const sorted = sortRecordsByDate(list);
+        setRows(sorted);
+        setDataCache(key, sorted);
+        void saveAttendanceDiskCache(key, sorted);
+      } catch (e: unknown) {
+        setErr(e instanceof Error ? e.message : 'Could not load attendance.');
+        if (!hadCache) setRows([]);
+      } finally {
+        setLoading(false);
+        setPullRefreshing(false);
+      }
+    },
+    [attendanceCacheKey, hydrateFromCache, token],
+  );
+
+  const handleRangeChange = useCallback(
+    (next: AdminDateRange) => {
+      setDraftRange(next);
+    },
+    [],
+  );
+
+  const applyDates = useCallback(
+    (range: AdminDateRange) => {
+      setDraftRange(range);
+      setAppliedRange(range);
+      persistPrefs(range, appliedLibraryRef.current);
+    },
+    [persistPrefs],
+  );
+
+  const applyMemberFilter = useCallback(
+    (trimmed: string) => {
+      setAppliedLibrary(trimmed);
+      persistPrefs(appliedRangeRef.current, trimmed);
+    },
+    [persistPrefs],
+  );
+
+  useEffect(() => {
+    if (!prefsReady) return;
     void load();
+  }, [load, prefsReady, appliedRange.fromIso, appliedRange.toIso, appliedLibrary]);
+
+  const onPullRefresh = useCallback(() => {
+    void load({ pull: true });
   }, [load]);
 
   const present = rows.filter((r) => r.Status === 'P').length;
   const absent = rows.filter((r) => r.Status === 'A').length;
   const sections = useMemo(() => groupRecordsByDate(rows), [rows]);
   const multiDay = appliedRange.fromIso !== appliedRange.toIso;
+  const listBusy = loading && rows.length === 0;
+  const listRevalidating = loading && rows.length > 0;
 
-  const ListHeader = useCallback(
-    () => (
-      <View style={{ paddingBottom: 14, gap: 12 }}>
-        <AdminPageHeader
-          eyebrow="attendance"
-          title="Attendance"
-          description={`Daily gate summary — pick a date range and optional ${DEVICE_USER_ID_LABEL.toLowerCase()}.`}
-        />
+  return (
+    <View style={styles.root}>
+      <View style={[styles.filters, adminScrollContentInsets(insets.bottom, 14)]}>
+        <Text style={[styles.title, { color: c.ink900 }]}>Attendance</Text>
 
         <AdminDateRangeFilter
+          variant="minimal"
           value={draftRange}
           onChange={handleRangeChange}
           onApply={applyDates}
-          applying={loading}
         />
 
         <AdminSearchField
           value={libraryQuery}
           onChangeText={setLibraryQuery}
-          placeholder={`${DEVICE_USER_ID_LABEL} (optional)`}
+          placeholder={`${DEVICE_USER_ID_LABEL} filter (optional)`}
           keyboardType="number-pad"
           returnKeyType="search"
-          onSubmitEditing={() => setAppliedLibrary(libraryQuery.trim())}
+          onSubmitEditing={() => applyMemberFilter(libraryQuery.trim())}
         />
 
         {appliedLibrary.trim() ? (
           <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Clear library filter"
             onPress={() => {
               setLibraryQuery('');
-              setAppliedLibrary('');
+              applyMemberFilter('');
             }}
             style={[styles.filterChip, { backgroundColor: c.azure50 }]}
           >
             <Text style={[styles.filterChipText, { color: c.azure700 }]}>
-              Member {deviceUserIdToEmpcode(appliedLibrary)} · Tap to clear
+              Member {deviceUserIdToEmpcode(appliedLibrary)} · Clear
             </Text>
           </Pressable>
         ) : (
           <Pressable
-            accessibilityRole="button"
-            onPress={() => setAppliedLibrary(libraryQuery.trim())}
-            style={({ pressed }) => [
-              styles.memberApply,
-              { borderColor: c.border, backgroundColor: c.surface, opacity: pressed ? 0.9 : 1 },
-            ]}
+            onPress={() => applyMemberFilter(libraryQuery.trim())}
+            style={[styles.applyMember, { borderColor: c.border }]}
           >
-            <Text style={[styles.memberApplyText, { color: c.ink800 }]}>Apply member filter</Text>
+            <Text style={[styles.applyMemberText, { color: c.ink700 }]}>Apply member filter</Text>
           </Pressable>
         )}
 
-        <View style={styles.tiles}>
-          <AdminMetricTile label="Present" value={String(present)} tone="azure" />
-          <AdminMetricTile label="Absent" value={String(absent)} />
-          <AdminMetricTile label="Rows" value={String(rows.length)} hint="Punch rows in range" />
-        </View>
-
-        <View style={[styles.recentBlock, { borderColor: c.border, backgroundColor: c.surface }]}>
-          <Text style={[styles.recentTitle, { color: c.ink900 }]}>Recent check-ins</Text>
-          {recentPunches.length === 0 ? (
-            <Text style={[styles.recentEmpty, { color: c.ink500 }]}>
-              {loading ? 'Loading…' : 'No recent check-ins.'}
-            </Text>
-          ) : (
-            recentPunches.slice(0, 20).map((r, i) => (
-              <AdminListRow
-                key={`${r.empcode}-${r.punchDate}-${i}`}
-                last={i === Math.min(recentPunches.length, 20) - 1}
-                title={r.fullName ?? r.empcode}
-                subtitle={`${r.punchDate}${r.deviceUserId != null ? ` · ID ${String(r.deviceUserId).padStart(4, '0')}` : ''}`}
-                right={
-                  r.flag ? (
-                    <Text style={[styles.recentFlag, { color: c.ink600 }]}>{r.flag}</Text>
-                  ) : undefined
-                }
-                showChevron={false}
-              />
-            ))
-          )}
+        <View style={styles.statRow}>
+          <StatPill label="Present" value={String(present)} accent={c.emerald700} loading={loading} />
+          <StatPill label="Absent" value={String(absent)} loading={loading} />
+          <StatPill label="Rows" value={String(rows.length)} loading={loading} />
         </View>
 
         {err ? (
           <AdminEmptyState title="Could not load" body={err} actionLabel="Retry" onAction={() => void load()} />
         ) : null}
-        {loading && rows.length === 0 && !err ? (
-          <ActivityIndicator style={{ marginTop: 8 }} color={c.azure500} />
-        ) : null}
       </View>
-    ),
-    [
-      absent,
-      applyDates,
-      appliedLibrary,
-      c.azure50,
-      c.azure500,
-      c.azure700,
-      c.border,
-      c.ink800,
-      c.surface,
-      draftRange,
-      err,
-      libraryQuery,
-      load,
-      loading,
-      present,
-      rows.length,
-      recentPunches,
-      c.surface,
-    ],
-  );
 
-  return (
-    <View style={styles.root}>
       <SectionList
+        style={styles.list}
         sections={sections}
         keyExtractor={(r) => `${r.DateString}-${r.Empcode}-${r.INTime}`}
-        ListHeaderComponent={ListHeader}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={c.azure500} />}
-        contentContainerStyle={[adminScrollContentInsets(insets.bottom, 14), styles.listPad]}
+        refreshControl={
+          <RefreshControl refreshing={pullRefreshing} onRefresh={onPullRefresh} tintColor={c.azure500} />
+        }
+        contentContainerStyle={[styles.listPad, { paddingBottom: Math.max(insets.bottom, 14) }]}
         showsVerticalScrollIndicator={false}
         stickySectionHeadersEnabled
         renderSectionHeader={({ section }) =>
@@ -242,19 +297,14 @@ export default function AdminAttendanceScreen() {
         renderItem={({ item, index, section }) => (
           <View
             style={[
-              styles.card,
-              { backgroundColor: c.surface, borderColor: c.border },
-              index === 0 && multiDay && styles.cardSectionFirst,
+              styles.rowCard,
+              { backgroundColor: c.surface, borderColor: c.border, opacity: listRevalidating ? 0.55 : 1 },
             ]}
           >
             <AdminListRow
               last={index === section.data.length - 1}
               title={item.Name}
-              subtitle={
-                multiDay
-                  ? `${item.Empcode} · In ${item.INTime} · Out ${item.OUTTime}`
-                  : `${item.Empcode} · In ${item.INTime} · Out ${item.OUTTime} · Work ${item.WorkTime}`
-              }
+              subtitle={`${item.Empcode} · In ${item.INTime} · Out ${item.OUTTime}`}
               right={
                 <StatusBadge
                   tone={item.Status === 'P' ? 'azure' : item.Status === 'A' ? 'danger' : 'warn'}
@@ -267,10 +317,12 @@ export default function AdminAttendanceScreen() {
           </View>
         )}
         ListEmptyComponent={
-          !loading && !err ? (
+          listBusy && !err ? (
+            <AdminListSkeleton rows={6} />
+          ) : !loading && !err ? (
             <AdminEmptyState
               title="No attendance in range"
-              body="Try another date range or clear the member filter. Data appears after gate check-ins sync."
+              body="Pick dates above or try another member filter."
               actionLabel="Reload"
               onAction={() => void load()}
             />
@@ -283,8 +335,23 @@ export default function AdminAttendanceScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  listPad: { flexGrow: 1 },
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  filters: { gap: 12, paddingBottom: 8 },
+  list: { flex: 1 },
+  listPad: { flexGrow: 1, paddingHorizontal: 14 },
+  title: { fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
+  statRow: { flexDirection: 'row', gap: 8 },
+  statPill: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    gap: 4,
+  },
+  statValue: { fontSize: 20, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  statValueBone: { width: 40, height: 22, borderRadius: 6, marginBottom: 2 },
+  statLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
   filterChip: {
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
@@ -292,39 +359,28 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   filterChipText: { fontSize: 13, fontWeight: '600' },
-  memberApply: {
-    borderRadius: 12,
+  applyMember: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  memberApplyText: { fontSize: 15, fontWeight: '600' },
+  applyMemberText: { fontSize: 14, fontWeight: '600' },
   sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginBottom: 6,
+  },
+  sectionTitle: { fontSize: 14, fontWeight: '700' },
+  sectionCount: { fontSize: 12, fontWeight: '500' },
+  rowCard: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
     marginBottom: 8,
-  },
-  sectionTitle: { fontSize: 15, fontWeight: '700' },
-  sectionCount: { fontSize: 13, fontWeight: '500' },
-  card: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 10,
     overflow: 'hidden',
   },
-  cardSectionFirst: { marginTop: 0 },
-  recentBlock: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-    paddingTop: 4,
-  },
-  recentTitle: { fontSize: 15, fontWeight: '700', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 },
-  recentEmpty: { fontSize: 13, paddingHorizontal: 14, paddingVertical: 16 },
-  recentFlag: { fontSize: 11, fontWeight: '600' },
 });

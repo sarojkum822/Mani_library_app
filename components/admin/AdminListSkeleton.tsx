@@ -9,7 +9,7 @@ export function AdminListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <View style={styles.wrap} accessibilityLabel="Loading" accessibilityRole="progressbar">
       {Array.from({ length: rows }, (_, i) => (
-        <View key={i} style={[styles.row, adminCardChrome(c)]}>
+        <View key={i} style={[adminCardChrome(c), styles.row]}>
           <View style={[styles.avatar, { backgroundColor: c.ink100 }]} />
           <View style={styles.lines}>
             <View style={[styles.line, styles.lineWide, { backgroundColor: c.ink100 }]} />
@@ -22,12 +22,13 @@ export function AdminListSkeleton({ rows = 6 }: { rows?: number }) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 12, paddingTop: 4 },
+  wrap: { gap: 10, paddingTop: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     padding: 14,
+    borderRadius: 12,
   },
   avatar: { width: 40, height: 40, borderRadius: 20 },
   lines: { flex: 1, gap: 8 },

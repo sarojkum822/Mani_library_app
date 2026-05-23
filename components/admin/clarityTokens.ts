@@ -3,15 +3,11 @@
  * Use these helpers so iOS and Android share the same card, type, and chrome.
  */
 
-import { StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
 
 import Colors from '@/constants/Colors';
 import { FONT_MONO, FONT_SANS } from '@/constants/Fonts';
-import {
-  adminGlassCardChrome,
-  adminGlassSearchChrome,
-  type AdminGlassAccent,
-} from '@/components/admin/adminGlassTheme';
+import { adminGlassSearchChrome, type AdminGlassAccent } from '@/components/admin/adminGlassTheme';
 import { cardElevation } from '@/lib/platformStyles';
 import { useColorScheme } from '@/components/useColorScheme';
 
@@ -168,9 +164,17 @@ export function useAdminPalette(): AdminPalette {
   return Colors[scheme];
 }
 
-/** Frosted glass card — minimal azure tint (professional, not flat B&W). */
-export function adminCardChrome(c: AdminPalette, accent: AdminGlassAccent = 'default'): ViewStyle {
-  return adminGlassCardChrome(c, accent);
+/** List / section cards — solid surface, hairline border, light shadow on iOS only. */
+export function adminCardChrome(c: AdminPalette, _accent: AdminGlassAccent = 'default'): ViewStyle {
+  const base: ViewStyle = {
+    backgroundColor: c.surface,
+    borderColor: c.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: CLARITY_CARD_RADIUS,
+    overflow: 'hidden',
+  };
+  if (Platform.OS === 'android') return base;
+  return { ...base, ...cardElevation() };
 }
 
 /** Chart wells, nested panels. */

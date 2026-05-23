@@ -27,13 +27,13 @@ function cardWash(accent: AdminGlassAccent): string | undefined {
 
 export function adminGlassShadow(): ViewStyle {
   if (Platform.OS === 'android') {
-    return { elevation: 3 };
+    return {};
   }
   return {
-    shadowColor: '#0160D0',
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
+    shadowColor: '#101828',
+    shadowOpacity: 0.06,
+    shadowRadius: 2.5,
+    shadowOffset: { width: 0, height: 1 },
   };
 }
 

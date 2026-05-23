@@ -4,15 +4,13 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router } from 'expo-router';
 
 import Colors from '@/constants/Colors';
-import { type } from '@/constants/Typography';
 import { useColorScheme } from '@/components/useColorScheme';
-import { DetailRow } from '@/components/student/DetailRow';
+import { MemberMembershipHeroCard } from '@/components/student/MemberMembershipHeroCard';
 import { StudentSectionLabel } from '@/components/student/StudentSectionLabel';
 import { PaymentHistoryList } from '@/components/student/PaymentHistoryList';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Screen, textStyles } from '@/components/ui/Screen';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useLibraryInfo } from '@/components/library/LibraryInfoProvider';
 import { useMemberPrefetch } from '@/components/member/MemberPrefetchProvider';
@@ -22,31 +20,6 @@ import {
   SHORT_TERM_DURATION_OPTIONS,
 } from '@/lib/membershipPricing';
 import { seatMapPlanIdForMarketingPlan } from '@/lib/marketingPlanSeatPreview';
-
-function statusLabel(m: Membership) {
-  if (m.status === 'upcoming') return 'Starts soon';
-  if (m.status === 'active') return 'Active';
-  if (m.status === 'expiring_soon') return 'Expiring soon';
-  if (m.status === 'expired') return 'Expired';
-  return 'Not active';
-}
-
-function statusTone(m: Membership): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (m.status === 'active') return 'success';
-  if (m.status === 'expiring_soon' || m.status === 'upcoming') return 'warning';
-  if (m.status === 'expired') return 'danger';
-  return 'neutral';
-}
-
-function formatStartDate(iso: string | undefined): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
 
 export default function StudentMembershipScreen() {
   const scheme = useColorScheme() ?? 'light';
@@ -197,36 +170,18 @@ export default function StudentMembershipScreen() {
     );
   }
 
-  const seatBlock = coreLoading ? null : hasSubscription ? (
-    <Card style={{ padding: 0, overflow: 'hidden', marginTop: 12 }}>
-      <View style={[styles.seatBanner, { backgroundColor: c.azure50, borderBottomColor: c.azure200 }]}>
-        <Text style={[styles.seatBannerLabel, { color: c.azure700 }]}>Your library spot</Text>
-        <Text style={[styles.seatNo, { color: c.ink900 }]}>{data?.seatNo ?? '—'}</Text>
-        <Text style={[styles.seatFloor, { color: c.ink600 }]}>{data?.floor ?? '—'}</Text>
-      </View>
-    </Card>
-  ) : (
-    <Card style={{ padding: 16, marginTop: 12, gap: 8 }}>
-      <Text style={[styles.kicker, { color: c.ink500 }]}>Your seat</Text>
-      <Text style={[textStyles.body, { color: c.ink600, lineHeight: 20 }]}>
-        After you buy a plan and pick a desk on the floor map, your seat number and floor will show here.
-      </Text>
-      <Button title="Buy membership" onPress={() => router.push('/(student)/membership/plans?intent=buy')} />
-    </Card>
-  );
-
   const renewCtaTitle =
     data?.status === 'expired'
       ? 'Renew membership'
       : data?.status === 'expiring_soon'
         ? 'Renew before expiry'
-        : 'Renew or change plan';
+        : 'Renew plan';
 
   return (
     <Screen
       title="Membership"
-      subtitle="Your plan, seat, and renewal"
       scrollable
+      background="muted"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
     >
       {prefetchError ? (
@@ -259,82 +214,39 @@ export default function StudentMembershipScreen() {
           <Text style={[textStyles.body, { color: c.ink600, textAlign: 'center' }]}>Loading plan details…</Text>
         </Card>
       ) : hasSubscription && data ? (
-        <Card
-          style={{
-            ...styles.heroCard,
-            backgroundColor: c.azure50,
-            borderColor: c.azure100,
-          }}
-        >
-          <View style={styles.heroTop}>
-            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-              <Text style={[styles.kicker, { color: c.ink500 }]}>Current plan</Text>
-              <Text style={[type.headline, { color: c.ink900 }]} numberOfLines={2}>
-                {data.planName ?? 'Membership'}
-              </Text>
-            </View>
-            <StatusBadge tone={statusTone(data)} label={statusLabel(data)} />
-          </View>
-          <Card style={{ padding: 0, overflow: 'hidden', backgroundColor: c.surface }}>
-            {isUpcoming ? (
-              <DetailRow label="Starts" value={formatStartDate(data.startsAt)} />
-            ) : (
-              <>
-                <DetailRow
-                  label="Valid through"
-                  value={
-                    data.expiresAt
-                      ? new Date(data.expiresAt).toLocaleDateString('en-IN', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })
-                      : '—'
-                  }
-                />
-                <DetailRow
-                  label="Days left"
-                  value={data.daysLeft != null ? String(data.daysLeft) : '—'}
-                  last
-                />
-              </>
-            )}
-          </Card>
-          {isUpcoming ? (
-            <Text style={[textStyles.body, { color: c.ink600, lineHeight: 20 }]}>
-              Payment recorded. Access begins on the start date — your seat stays reserved until then.
-            </Text>
-          ) : null}
-          <View style={{ gap: 10 }}>
-            <Button
-              title="View available seats"
-              variant="secondary"
-              onPress={() =>
-                router.push({
-                  pathname: '/(student)/membership/seat-map',
-                  params: {
-                    planId: seatMapPlanIdForMarketingPlan(data.planMarketingId ?? 'main-hall'),
-                    preview: '1',
-                  },
-                })
-              }
-            />
-            {data.renewPlanEligible ? (
-              <Button title={renewCtaTitle} onPress={() => router.push('/(student)/membership/plans?intent=renew')} />
-            ) : null}
-          </View>
-        </Card>
+        <MemberMembershipHeroCard
+          membership={data}
+          renewLabel={renewCtaTitle}
+          renewVisible={Boolean(data.renewPlanEligible)}
+          onRenew={() => router.push('/(student)/membership/plans?intent=renew')}
+          onViewSeats={() =>
+            router.push({
+              pathname: '/(student)/membership/seat-map',
+              params: {
+                planId: seatMapPlanIdForMarketingPlan(data.planMarketingId ?? 'main-hall'),
+                preview: '1',
+              },
+            })
+          }
+          style={{ marginBottom: 16 }}
+        />
       ) : (
-        <Card style={{ padding: 16, gap: 10 }}>
-          <Text style={[type.headline, { color: c.ink900 }]}>No active membership</Text>
-          <Text style={[textStyles.body, { color: c.ink600, lineHeight: 20 }]}>
+        <Card style={{ padding: 20, gap: 12, marginBottom: 12, borderRadius: 20 }}>
+          <Text style={[textStyles.body, { color: c.ink900, fontSize: 18, fontWeight: '700' }]}>
+            No active membership
+          </Text>
+          <Text style={[textStyles.body, { color: c.ink600, lineHeight: 22 }]}>
             Choose a plan and seat to start studying at {lib.name}.
           </Text>
           <Button title="Buy membership" onPress={() => router.push('/(student)/membership/plans?intent=buy')} />
         </Card>
       )}
 
-      {seatBlock}
+      {isUpcoming && hasSubscription && data ? (
+        <Text style={[textStyles.body, { color: c.ink600, lineHeight: 22, marginBottom: 12 }]}>
+          Payment recorded. Access begins on the start date — your seat stays reserved until then.
+        </Text>
+      ) : null}
 
       {paymentHistory && paymentHistory.length > 0 ? (
         <>
@@ -390,22 +302,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  heroCard: {
-    padding: 16,
-    marginBottom: 12,
-    gap: 14,
-    borderWidth: 1,
-    borderRadius: 16,
-  },
-  heroTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  kicker: { fontSize: 10, fontWeight: '600', letterSpacing: 1.4, textTransform: 'uppercase' },
-  seatBanner: { paddingHorizontal: 16, paddingVertical: 18, borderBottomWidth: 1 },
-  seatBannerLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
-  seatNo: { marginTop: 8, fontSize: 28, fontWeight: '700', letterSpacing: -0.5 },
-  seatFloor: { marginTop: 6, fontSize: 14, fontWeight: '500' },
 });

@@ -36,20 +36,33 @@ export function AdminMetricTile({ label, value, hint, hintMuted, valueTone = 'ne
 
   return (
     <View style={[styles.card, chrome]}>
-      <Text style={[CLARITY_METRIC_LABEL, { color: c.ink500 }]}>{label}</Text>
-      <Text style={[styles.value, CLARITY_KPI_VALUE, { color: adminKpiValueColor(c, valueTone) }]}>{value}</Text>
-      {hint ? (
-        <Text style={[CLARITY_HINT, styles.hintGap, { color: c.ink500 }]}>{hint}</Text>
-      ) : null}
-      {hintMuted ? (
-        <Text style={[CLARITY_HINT_MUTED, styles.hintGap, { color: c.ink400 }]}>{hintMuted}</Text>
-      ) : null}
+      <Text style={[CLARITY_METRIC_LABEL, { color: c.ink500 }]} numberOfLines={2}>
+        {label}
+      </Text>
+      <Text
+        style={[styles.value, CLARITY_KPI_VALUE, { color: adminKpiValueColor(c, valueTone) }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
+      >
+        {value}
+      </Text>
+      <View style={styles.hintSlot}>
+        {hint ? <Text style={[CLARITY_HINT, { color: c.ink500 }]}>{hint}</Text> : null}
+        {hintMuted ? <Text style={[CLARITY_HINT_MUTED, { color: c.ink400 }]}>{hintMuted}</Text> : null}
+      </View>
     </View>
   );
 }
 
+const METRIC_TILE_MIN_HEIGHT = 118;
+
 const styles = StyleSheet.create({
-  card: { padding: CLARITY_CARD_PADDING },
+  card: {
+    flex: 1,
+    minHeight: METRIC_TILE_MIN_HEIGHT,
+    padding: CLARITY_CARD_PADDING,
+  },
   value: { marginTop: 10 },
-  hintGap: { marginTop: 8 },
+  hintSlot: { marginTop: 8, minHeight: 22, justifyContent: 'flex-end' },
 });

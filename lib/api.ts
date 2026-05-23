@@ -229,6 +229,18 @@ export type GalleryImage = {
   createdAt?: string;
 };
 
+export type PublicHeroSlot = {
+  slot: 1 | 2 | 3;
+  galleryImageId: string | null;
+  imageUrl: string | null;
+  tagline: string | null;
+  taglineSub: string | null;
+};
+
+export type PublicHeroSettings = {
+  slots: PublicHeroSlot[];
+};
+
 export type PublicTestimonial = {
   fullName: string;
   subtitle: string;
@@ -792,9 +804,17 @@ export type AdminSeatSnapshot = {
   shortTermDistinctSeats: number;
 };
 
+export type AdminOverviewChart = {
+  revenueByDay: Array<{ day: string; amountInr: number }>;
+  membershipsCreatedByDay: Array<{ day: string; count: number }>;
+  maxRevenueInr: number;
+  maxMembershipsCreated: number;
+};
+
 export type AdminOverviewSnapshot = {
   stats: AdminOverviewStats;
   seatSnapshot: AdminSeatSnapshot;
+  chart: AdminOverviewChart;
   expiringSoon: Array<{
     id: string;
     userId: string;
@@ -1508,7 +1528,22 @@ export const api = {
         plan,
       };
     });
-    return { stats, seatSnapshot, expiringSoon, recentPayments };
+    const chartRaw = (j.chart ?? {}) as Record<string, unknown>;
+    const revDayRaw = Array.isArray(chartRaw.revenueByDay) ? chartRaw.revenueByDay : [];
+    const memDayRaw = Array.isArray(chartRaw.membershipsCreatedByDay) ? chartRaw.membershipsCreatedByDay : [];
+    const chart: AdminOverviewChart = {
+      revenueByDay: revDayRaw.map((row) => {
+        const r = row as Record<string, unknown>;
+        return { day: String(r.day ?? ''), amountInr: Number(r.amountInr ?? 0) || 0 };
+      }),
+      membershipsCreatedByDay: memDayRaw.map((row) => {
+        const r = row as Record<string, unknown>;
+        return { day: String(r.day ?? ''), count: Number(r.count ?? 0) || 0 };
+      }),
+      maxRevenueInr: Number(chartRaw.maxRevenueInr ?? 0) || 0,
+      maxMembershipsCreated: Number(chartRaw.maxMembershipsCreated ?? 0) || 0,
+    };
+    return { stats, seatSnapshot, chart, expiringSoon, recentPayments };
   },
 
   async adminPaymentsList(token: string): Promise<AdminPaymentsListPayload> {
@@ -1732,6 +1767,23 @@ export const api = {
       sortOrder: (img as GalleryImage).sortOrder,
       createdAt: (img as GalleryImage).createdAt,
     }));
+  },
+
+  async publicHero(): Promise<PublicHeroSettings> {
+    const j = await request<{ hero?: PublicHeroSettings }>('/api/public/hero');
+    const hero = j.hero;
+    const slotsRaw = Array.isArray(hero?.slots) ? hero!.slots : [];
+    const slots: PublicHeroSlot[] = [1, 2, 3].map((slot) => {
+      const row = slotsRaw.find((s) => Number((s as PublicHeroSlot).slot) === slot) as PublicHeroSlot | undefined;
+      return {
+        slot: slot as 1 | 2 | 3,
+        galleryImageId: row?.galleryImageId ?? null,
+        imageUrl: row?.imageUrl?.trim() ? row.imageUrl : null,
+        tagline: row?.tagline?.trim() ? row.tagline : null,
+        taglineSub: row?.taglineSub?.trim() ? row.taglineSub : null,
+      };
+    });
+    return { slots };
   },
 
   async publicTestimonials(): Promise<PublicTestimonial[]> {

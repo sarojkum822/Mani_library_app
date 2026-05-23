@@ -1,15 +1,12 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AdminAvatar } from '@/components/admin/AdminAvatar';
 import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
-import { AdminListRow } from '@/components/admin/AdminListRow';
+import { AdminFeedbackCard } from '@/components/admin/AdminFeedbackCard';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
-import { adminCardChrome, CLARITY_BODY_SM } from '@/components/admin/clarityTokens';
 import { adminScrollContentInsets } from '@/components/admin/layoutTokens';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useStaleWhileRevalidate } from '@/hooks/useStaleWhileRevalidate';
@@ -39,26 +36,35 @@ export default function AdminFeedbackScreen() {
 
   const rows = data ?? [];
 
-  const toggleApprove = (row: AdminFeedbackRow) => {
+  const setApproved = async (row: AdminFeedbackRow, approved: boolean) => {
     if (!token) return;
-    const next = !row.approved;
-    Alert.alert(next ? 'Approve for homepage?' : 'Remove from homepage?', row.comment.slice(0, 120), [
+    setBusyId(row.userId);
+    try {
+      await api.adminFeedbackApprove(token, row.userId, approved);
+      setRefreshKey((k) => k + 1);
+    } catch (e: unknown) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not update.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onApprove = (row: AdminFeedbackRow) => {
+    Alert.alert('Approve for homepage?', 'This testimonial will appear on the public site.', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: next ? 'Approve' : 'Unapprove',
-        onPress: async () => {
-          setBusyId(row.userId);
-          try {
-            await api.adminFeedbackApprove(token, row.userId, next);
-            setRefreshKey((k) => k + 1);
-          } catch (e: unknown) {
-            Alert.alert('Error', e instanceof Error ? e.message : 'Could not update.');
-          } finally {
-            setBusyId(null);
-          }
-        },
-      },
+      { text: 'Approve', onPress: () => void setApproved(row, true) },
     ]);
+  };
+
+  const onDismiss = (row: AdminFeedbackRow) => {
+    if (row.approved) {
+      Alert.alert('Remove from homepage?', 'Members will no longer see this on the landing page.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Unapprove', onPress: () => void setApproved(row, false) },
+      ]);
+      return;
+    }
+    // Pending: no API change — acknowledge only
   };
 
   return (
@@ -68,14 +74,14 @@ export default function AdminFeedbackScreen() {
       data={rows}
       keyExtractor={(item) => item.userId}
       refreshControl={
-        <RefreshControl refreshing={revalidating} onRefresh={() => setRefreshKey((k) => k + 1)} />
+        <RefreshControl refreshing={revalidating} onRefresh={() => setRefreshKey((k) => k + 1)} tintColor={c.azure500} />
       }
       ListHeaderComponent={
         <View style={{ paddingBottom: 12, gap: 10 }}>
           <AdminPageHeader
             eyebrow="members"
             title="Member feedback"
-            description="Approve ratings to show on the public homepage testimonials."
+            description="Review ratings and comments. Approved feedback appears in homepage testimonials."
           />
           {error ? (
             <AdminEmptyState title="Could not load" body={error} actionLabel="Retry" onAction={() => setRefreshKey((k) => k + 1)} />
@@ -87,42 +93,19 @@ export default function AdminFeedbackScreen() {
           <AdminEmptyState title="No feedback yet" body="Members submit feedback from their profile after verification." />
         )
       }
-      renderItem={({ item }) => {
-        const idLabel =
-          item.deviceUserId != null ? String(item.deviceUserId).padStart(4, '0') : '—';
-        return (
-          <View style={[styles.card, adminCardChrome(c)]}>
-            <AdminListRow
-              left={<AdminAvatar name={item.fullName} small />}
-              title={item.fullName}
-              subtitle={`★ ${item.rating} · ID ${idLabel}${item.email ? ` · ${item.email}` : ''}`}
-              right={
-                <StatusBadge
-                  tone={item.approved ? 'success' : 'warning'}
-                  label={item.approved ? 'Live' : 'Pending'}
-                />
-              }
-              showChevron={false}
-              onPress={() => toggleApprove(item)}
-              last
-            />
-            <Text style={[styles.comment, CLARITY_BODY_SM, { color: c.ink800 }]}>{item.comment}</Text>
-            <Text style={[styles.action, { color: busyId === item.userId ? c.ink400 : c.azure600 }]}>
-              {busyId === item.userId ? 'Updating…' : item.approved ? 'Tap to unapprove' : 'Tap to approve'}
-            </Text>
-          </View>
-        );
-      }}
+      renderItem={({ item }) => (
+        <AdminFeedbackCard
+          row={item}
+          busy={busyId === item.userId}
+          onApprove={() => onApprove(item)}
+          onDismiss={() => onDismiss(item)}
+          style={styles.cardGap}
+        />
+      )}
     />
   );
 }
 
 const styles = StyleSheet.create({
-  card: { marginBottom: 10, overflow: 'hidden' },
-  comment: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    lineHeight: 21,
-  },
-  action: { fontSize: 12, fontWeight: '600', paddingHorizontal: 14, paddingBottom: 12 },
+  cardGap: { marginBottom: 16 },
 });

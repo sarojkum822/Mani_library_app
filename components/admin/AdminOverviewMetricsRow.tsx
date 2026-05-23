@@ -17,11 +17,20 @@ export function AdminOverviewMetricsRow({ children }: Props) {
   const useGrid = width < GRID_BREAKPOINT;
 
   if (useGrid) {
+    const rows: React.ReactNode[][] = [];
+    for (let i = 0; i < items.length; i += 2) {
+      rows.push(items.slice(i, i + 2));
+    }
     return (
-      <View style={styles.grid}>
-        {items.map((child, i) => (
-          <View key={i} style={styles.gridCell}>
-            {child}
+      <View style={styles.gridStack}>
+        {rows.map((pair, rowIdx) => (
+          <View key={rowIdx} style={styles.gridRow}>
+            {pair.map((child, i) => (
+              <View key={i} style={styles.gridCell}>
+                {child}
+              </View>
+            ))}
+            {pair.length === 1 ? <View style={styles.gridCell} /> : null}
           </View>
         ))}
       </View>
@@ -58,16 +67,9 @@ export function AdminOverviewMetricsRow({ children }: Props) {
 }
 
 const styles = StyleSheet.create({
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: GAP,
-    justifyContent: 'space-between',
-  },
-  gridCell: {
-    width: '48%',
-    minWidth: 0,
-  },
+  gridStack: { gap: GAP },
+  gridRow: { flexDirection: 'row', gap: GAP, alignItems: 'stretch' },
+  gridCell: { flex: 1, minWidth: 0 },
   row: { flexDirection: 'row', gap: GAP, alignItems: 'stretch' },
   flexItem: { flex: 1, minWidth: CARD_MIN },
   scrollContent: { paddingVertical: 2 },

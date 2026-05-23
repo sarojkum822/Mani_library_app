@@ -26,7 +26,6 @@ export default function StudentTabsLayout() {
   const signedIn = auth.status === 'signed_in';
   const guestMode = !signedIn;
   const showMemberTabs = signedIn;
-  const showGuestSignInTab = guestMode;
   const tabBarBottom = Math.max(insets.bottom, 8);
 
   useEffect(() => {
@@ -63,7 +62,7 @@ export default function StudentTabsLayout() {
           letterSpacing: 0.15,
         },
         tabBarIconStyle: { marginBottom: -2 },
-        tabBarStyle: tabBarShown,
+        tabBarStyle: guestMode ? { display: 'none' } : tabBarShown,
       }}
     >
       <Tabs.Screen
@@ -83,7 +82,7 @@ export default function StudentTabsLayout() {
         }}
         options={{
           title: 'Sign in',
-          href: showGuestSignInTab ? undefined : null,
+          href: null,
           tabBarIcon: ({ color }) => <TabBarIcon name="sign-in" color={color} />,
         }}
       />

@@ -21,6 +21,7 @@ import { BrandLogo } from '@/components/BrandLogo';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { PublicGallerySection } from '@/components/public/PublicGallerySection';
+import { PublicHeroCollage } from '@/components/public/PublicHeroCollage';
 import { TestimonialsSection } from '@/components/public/TestimonialsSection';
 
 type SectionKey = 'facilities' | 'about' | 'plans' | 'gallery' | 'testimonials' | 'contact';
@@ -144,22 +145,31 @@ export function LandingScreen() {
         {isAdminSignedIn ? (
           <Pressable
             onPress={() => router.push('/(admin)')}
+            android_ripple={{ color: c.ink100 }}
             style={({ pressed }) => [
               styles.navAccount,
-              { borderColor: c.border, backgroundColor: c.surfaceMuted },
-              pressed && { opacity: 0.85 },
+              { borderColor: c.border, backgroundColor: c.surface },
+              pressed && { opacity: 0.88 },
             ]}
+            accessibilityRole="button"
+            accessibilityLabel="Open staff dashboard"
           >
-            <Text style={[styles.navAccountLabel, { color: c.ink900 }]}>Staff dashboard</Text>
-            <FontAwesome name="chevron-right" size={12} color={c.ink400} />
+            <View style={[styles.navAvatar, { backgroundColor: c.azure500 }]}>
+              <FontAwesome name="th-large" size={14} color="#fff" />
+            </View>
+            <Text style={[styles.navAccountLabel, { color: c.ink900 }]} numberOfLines={1}>
+              Staff dashboard
+            </Text>
+            <FontAwesome name="chevron-right" size={12} color={c.ink400} style={styles.navChevron} />
           </Pressable>
         ) : isStudentSignedIn ? (
           <Pressable
             onPress={openStudentProfileHub}
+            android_ripple={{ color: c.ink100 }}
             style={({ pressed }) => [
               styles.navAccount,
-              { borderColor: c.border, backgroundColor: c.surfaceMuted },
-              pressed && { opacity: 0.85 },
+              { borderColor: c.border, backgroundColor: c.surface },
+              pressed && { opacity: 0.88 },
             ]}
             accessibilityRole="button"
             accessibilityLabel="Open your profile"
@@ -172,7 +182,7 @@ export function LandingScreen() {
             <Text style={[styles.navAccountLabel, { color: c.ink900 }]} numberOfLines={1}>
               Hi, {memberLabel}
             </Text>
-            <FontAwesome name="chevron-right" size={12} color={c.ink400} />
+            <FontAwesome name="chevron-right" size={12} color={c.ink400} style={styles.navChevron} />
           </Pressable>
         ) : (
           <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
@@ -189,13 +199,8 @@ export function LandingScreen() {
         )}
       </View>
 
-      {!isStudentSignedIn ? (
-        <View style={[styles.guestRibbon, { backgroundColor: c.surfaceMuted, borderBottomColor: c.border }]}>
-          <Text style={[styles.guestRibbonText, { color: c.ink600 }]}>
-            Guest mode — scroll to membership plans below, or sign in for attendance and your account.
-          </Text>
-        </View>
-      ) : mp.loading ? null : isFirstTimeJoin ? (
+      {isStudentSignedIn && !mp.loading ? (
+        isFirstTimeJoin ? (
         <View style={[styles.guestRibbon, { backgroundColor: c.azure50, borderBottomColor: c.azure200 }]}>
           <Text style={[styles.guestRibbonText, { color: c.azure700 }]}>
             Welcome — you have not joined yet. Tap Join now below to pick a plan and choose your seat.
@@ -207,6 +212,7 @@ export function LandingScreen() {
             No active membership yet — use Complete membership below to choose a plan and finish setup.
           </Text>
         </View>
+      ) : null
       ) : null}
 
       <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: 48 }}>
@@ -301,19 +307,7 @@ export function LandingScreen() {
               )}
             </View>
 
-            <View style={[styles.heroStatsCard, { borderColor: c.ink100, alignSelf: 'stretch', width: '100%' }]}>
-              <View style={[styles.heroStatsGrid, { backgroundColor: c.ink100 }]}>
-                {[{ label: 'Quiet zones', value: '8' }, { label: 'Cabins', value: '120' }, { label: 'Always open', value: '24/7' }].map(
-                  (it, idx) => (
-                    <View key={it.label} style={[styles.heroStatCell, { backgroundColor: c.surface }]}>
-                      <Text style={[styles.heroStatValue, { color: c.azure500 }]}>{it.value}</Text>
-                      <Text style={[styles.heroStatLabel, { color: c.ink500 }]}>{it.label}</Text>
-                      {idx < 2 ? <View style={[styles.cellDivider, { backgroundColor: c.ink100 }]} /> : null}
-                    </View>
-                  )
-                )}
-              </View>
-            </View>
+            <PublicHeroCollage style={{ marginTop: 16, alignSelf: 'stretch', width: '100%' }} />
           </View>
         </View>
 
@@ -846,11 +840,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     maxWidth: '58%',
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 999,
     paddingLeft: 4,
-    paddingRight: 10,
+    paddingRight: 12,
     paddingVertical: 4,
+    overflow: 'hidden',
   },
   navAvatar: {
     width: 32,
@@ -858,11 +853,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   navAvatarText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  navAccountLabel: { flex: 1, fontSize: 14, fontWeight: '600', minWidth: 0 },
+  navAccountLabel: { fontSize: 14, fontWeight: '600', flexShrink: 1 },
+  navChevron: { flexShrink: 0, marginLeft: 2 },
 
-  heroBg: { height: 420, position: 'absolute', left: 0, right: 0, top: 0 },
+  heroBg: { height: 480, position: 'absolute', left: 0, right: 0, top: 0 },
   gridOverlay: {
     ...StyleSheet.absoluteFillObject,
     borderTopWidth: 1,
@@ -965,7 +962,6 @@ const styles = StyleSheet.create({
   facCell: { width: '33.3333%', paddingHorizontal: 6, paddingVertical: 6 },
   facCard: {
     padding: 12,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,

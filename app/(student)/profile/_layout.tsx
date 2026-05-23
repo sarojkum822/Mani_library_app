@@ -11,7 +11,7 @@ export default function ProfileStackLayout() {
     <Stack screenOptions={screenOptions}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="details" options={{ title: 'Your profile' }} />
-      <Stack.Screen name="membership" options={{ title: 'Membership' }} />
+      <Stack.Screen name="membership" options={{ title: 'Membership track' }} />
       <Stack.Screen name="doc" options={{ title: 'Documents' }} />
       <Stack.Screen name="transactions" options={{ title: 'Payments' }} />
       <Stack.Screen name="recover-payment" options={{ title: 'Recover payment' }} />
