@@ -45,7 +45,7 @@ export default function MembershipSeatMapScreen() {
   const memberActive =
     auth.status === 'signed_in' &&
     auth.user.role === 'student' &&
-    mp.accountReady &&
+    !mp.loading &&
     hasActiveMembership(mp.membership);
   const previewOnly = previewParam || memberActive;
   const planKindParam = normalizeParam(params.planKind);

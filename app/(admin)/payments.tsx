@@ -8,6 +8,7 @@ import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
 import { AdminListRow } from '@/components/admin/AdminListRow';
 import { AdminListSkeleton } from '@/components/admin/AdminListSkeleton';
 import { AdminMetricTile } from '@/components/admin/AdminMetricTile';
+import { AdminOverviewMetricsRow } from '@/components/admin/AdminOverviewMetricsRow';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { AdminSectionCard } from '@/components/admin/AdminSectionCard';
 import { AdminSegmentedControl, type AdminSegment } from '@/components/admin/AdminSegmentedControl';
@@ -120,7 +121,7 @@ export default function AdminPaymentsScreen() {
 
   return (
     <ScrollView
-      style={[styles.root, { backgroundColor: c.surfaceMuted }]}
+      style={styles.root}
       contentContainerStyle={adminScrollContentInsets(insets.bottom)}
       showsVerticalScrollIndicator={false}
       refreshControl={
@@ -137,7 +138,7 @@ export default function AdminPaymentsScreen() {
         description="Charges and checkout status — tap a row for member details."
       />
       {revalidating ? (
-        <Text style={{ color: c.ink500, marginBottom: 8, fontSize: 11, fontWeight: '600', textAlign: 'right' }}>
+        <Text style={{ color: c.ink400, marginBottom: 8, fontSize: 10, fontWeight: '500', textAlign: 'right' }}>
           Updating…
         </Text>
       ) : null}
@@ -148,21 +149,23 @@ export default function AdminPaymentsScreen() {
 
       {stats ? (
         <>
-          <View style={styles.tiles}>
+          <AdminOverviewMetricsRow>
             <AdminMetricTile
               tone="azure"
               label="Revenue · 30 days"
               value={formatCurrency(lib, stats.revenue30dInr)}
               hint={`${stats.paidCount30d} paid`}
+              valueTone="revenue"
             />
             <AdminMetricTile
               label="Today"
               value={formatCurrency(lib, stats.revenueTodayInr)}
               hint={`${stats.paidCountToday} payments`}
+              valueTone="neutral"
             />
             <AdminMetricTile label="All-time paid" value={formatCurrency(lib, stats.totalPaidRevenueInr)} />
             <AdminMetricTile label="Pending" value={String(stats.pendingPayments)} hint="Awaiting capture" />
-          </View>
+          </AdminOverviewMetricsRow>
 
           <AdminSegmentedControl segments={segments} value={statusFilter} onChange={setStatusFilter} />
 
@@ -239,7 +242,6 @@ export default function AdminPaymentsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  tiles: { gap: 12 },
   rowCount: { fontSize: 13, fontWeight: '500', marginTop: 4 },
   expand: {
     paddingHorizontal: 16,

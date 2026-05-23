@@ -22,7 +22,7 @@ export default function MembershipHubScreen() {
   const active =
     auth.status === 'signed_in' &&
     auth.user.role === 'student' &&
-    mp.accountReady &&
+    !mp.loading &&
     hasActiveMembership(mp.membership);
 
   if (active) {

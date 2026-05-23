@@ -32,6 +32,10 @@ export const cacheKeys = {
   adminMembers: 'admin:members:list',
   adminPaymentsScreen: 'admin:payments:screen',
   adminPendingKyc: 'admin:pending-kyc',
+  adminFeedback: 'admin:feedback:list',
+  adminGallery: 'admin:gallery:list',
+  adminAttendance: (fromIso: string, toIso: string, empcode: string) =>
+    `admin:attendance:${fromIso}:${toIso}:${empcode}`,
   memberProfile: 'member:profile',
   memberDocuments: 'member:documents',
 } as const;

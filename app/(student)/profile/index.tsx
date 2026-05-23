@@ -16,24 +16,19 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CopyIdButton } from '@/components/admin/CopyIdButton';
 import { CLARITY_BODY, CLARITY_HINT } from '@/components/admin/clarityTokens';
+import { ProfileHeaderStrip } from '@/components/student/ProfileHeaderStrip';
 import { StudentPageHeader } from '@/components/student/StudentPageHeader';
 import { useLibraryInfo } from '@/components/library/LibraryInfoProvider';
 import { StudentSectionLabel } from '@/components/student/StudentSectionLabel';
-import {
-  verificationLabelForProfile,
-  verificationToneForProfile,
-} from '@/components/student/profileShared';
 import Colors from '@/constants/Colors';
-import { type } from '@/constants/Typography';
+import { FONT_SANS } from '@/constants/Fonts';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useMemberPrefetch } from '@/components/member/MemberPrefetchProvider';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { SettingsRow } from '@/components/ui/SettingsRow';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api, deviceUserIdDisplayFromProfile } from '@/lib/api';
 import { formatDeviceUserIdPadded } from '@/lib/deviceUserIdLabel';
 import { formatDisplayName, initialsFromPersonName } from '@/lib/displayName';
@@ -80,9 +75,7 @@ export default function StudentProfileScreen() {
   const profileMetaLoading = profileLoading && !memberProfile && deviceId === '—';
   const verificationMetaLoading = profileLoading && !memberProfile;
   const verificationStatus = memberProfile?.verificationStatus ?? 'none';
-  const kycSlots = memberProfile?.memberKycSlots
-    ? Object.values(memberProfile.memberKycSlots)
-    : null;
+  const isVerified = verificationStatus === 'verified';
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -113,7 +106,6 @@ export default function StudentProfileScreen() {
   const displayName = formatDisplayName(rawName) || rawName.trim() || 'Member';
   const remoteAvatar = memberProfile?.avatarUrl ? memberProfile.avatarUrl : null;
   const displayAvatarUri = remoteAvatar;
-  const avatarSize = 96;
   const initials = user ? initialsFromPersonName(rawName || user.name, user.email, user.phone) : '';
 
   const openPhotoOptions = useCallback(() => {
@@ -206,13 +198,8 @@ export default function StudentProfileScreen() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: c.surfaceMuted }]}>
-      <StudentPageHeader
-        title={user ? 'Profile' : 'Account'}
-        subtitle={
-          user ? undefined : 'Sign in for membership, attendance, and your library account.'
-        }
-      />
+    <View style={[styles.root, { backgroundColor: '#EEF4FB' }]}>
+      <StudentPageHeader title={user ? 'Profile' : 'Account'} subtitle={user ? undefined : 'Sign in for membership, attendance, and your library account.'} />
 
       {!user ? (
         <ScrollView
@@ -271,146 +258,78 @@ export default function StudentProfileScreen() {
             </View>
           ) : null}
 
-          <Card style={{ padding: 0, overflow: 'hidden' }}>
-            <View style={[styles.hero, { backgroundColor: c.surface }]}>
-              <>
-              <View style={[styles.avatarStage, { width: avatarSize + 48, minHeight: avatarSize + 36 }]}>
-                <View
-                  style={[
-                    styles.avatarRing,
-                    {
-                      width: avatarSize + 8,
-                      height: avatarSize + 8,
-                      borderColor: c.border,
-                      backgroundColor: c.surfaceMuted,
-                      overflow: 'hidden',
-                    },
-                  ]}
-                >
-                  {displayAvatarUri ? (
-                    <Image source={{ uri: displayAvatarUri }} style={[styles.avatarImg, { width: avatarSize, height: avatarSize }]} />
-                  ) : (
-                    <View
-                      style={[
-                        styles.avatarPlaceholder,
-                        { width: avatarSize, height: avatarSize, backgroundColor: c.azure500 },
-                      ]}
-                    >
-                      <Text style={[styles.avatarInitials, { fontSize: avatarSize * 0.32 }]}>{initials}</Text>
-                    </View>
-                  )}
-                  {photoLoading ? (
-                    <View style={[styles.avatarBusyOverlay, { backgroundColor: `${c.surface}CC` }]}>
-                      <ActivityIndicator color={c.azure500} />
-                    </View>
-                  ) : null}
-                </View>
+          <ProfileHeaderStrip
+            displayName={displayName}
+            deviceId={deviceId}
+            verified={isVerified}
+            verificationLoading={verificationMetaLoading}
+            avatarUri={displayAvatarUri}
+            initials={initials}
+            photoLoading={photoLoading}
+            onAvatarPress={openPhotoOptions}
+          />
 
-                <Pressable
-                  onPress={openPhotoOptions}
-                  disabled={photoLoading}
-                  hitSlop={10}
-                  style={({ pressed }) => [
-                    styles.cameraFab,
-                    {
-                      backgroundColor: c.azure500,
-                      borderColor: c.surface,
-                      opacity: photoLoading ? 0.45 : pressed ? 0.9 : 1,
-                    },
-                  ]}
-                  accessibilityLabel="Change profile photo"
-                  accessibilityRole="button"
-                >
-                  <FontAwesome name="camera" size={14} color="#fff" />
-                </Pressable>
-              </View>
-
-                  <Text style={[type.headline, styles.displayName, { color: c.ink900 }]}>{displayName}</Text>
-                  <View style={[styles.metaRow, { borderTopColor: c.border }]}>
-                    <View style={styles.metaBlock}>
-                      <Text style={[CLARITY_HINT, { color: c.ink500 }]}>Member ID</Text>
-                      {profileMetaLoading ? (
-                        <ActivityIndicator color={c.azure500} style={{ marginTop: 6, alignSelf: 'flex-start' }} />
-                      ) : (
-                        <CopyIdButton value={deviceId === '—' ? '' : deviceId} label="Copy ID" />
-                      )}
-                    </View>
-                    <View style={styles.metaBlock}>
-                      <Text style={[CLARITY_HINT, { color: c.ink500 }]}>ID verification</Text>
-                      {verificationMetaLoading ? (
-                        <ActivityIndicator color={c.azure500} style={{ marginTop: 6, alignSelf: 'flex-start' }} />
-                      ) : (
-                        <StatusBadge
-                          tone={verificationToneForProfile(verificationStatus, kycSlots)}
-                          label={verificationLabelForProfile(verificationStatus, kycSlots)}
-                        />
-                      )}
-                    </View>
-                  </View>
-                </>
-            </View>
-          </Card>
-
-          <StudentSectionLabel title="Account" />
-          <Card style={{ padding: 0, overflow: 'hidden', marginTop: 6 }}>
+          <StudentSectionLabel title="Account" variant="profile" />
+          <Card style={styles.menuCard}>
             <SettingsRow
               iconIon="person-outline"
-              title="Your profile"
-              subtitle="Device user id, contact, verification, intake"
+              title="Personal details"
+              clean
               onPress={() => router.push('/(student)/profile/details')}
               showSeparator
             />
             <SettingsRow
               iconIon="card-outline"
-              title="Membership"
-              subtitle="Plan, seat, and dates"
+              title="Membership track"
+              clean
               onPress={() => router.push('/(student)/profile/membership')}
+              showSeparator
+            />
+            <SettingsRow
+              iconIon="document-text-outline"
+              title="Documents"
+              clean
+              onPress={() => router.push('/(student)/profile/doc')}
               showSeparator
             />
             <SettingsRow
               iconIon="wallet-outline"
               title="Payments"
-              subtitle="Receipts, renewals, and status"
+              clean
               onPress={() => router.push('/(student)/profile/transactions')}
               showSeparator={false}
             />
           </Card>
 
-          <StudentSectionLabel title="General" />
-          <Card style={{ padding: 0, overflow: 'hidden', marginTop: 6 }}>
+          <StudentSectionLabel title="Support" variant="profile" />
+          <Card style={styles.menuCard}>
             <SettingsRow
-              iconIon="document-text-outline"
-              title="Documents & verification"
-              subtitle="Aadhaar and student ID"
-              onPress={() => router.push('/(student)/profile/doc')}
+              iconIon="chatbubble-outline"
+              title="Feedback"
+              clean
+              onPress={() => router.push('/(student)/profile/feedback')}
               showSeparator
             />
             <SettingsRow
-              iconIon="refresh-outline"
-              title="Recover payment"
-              subtitle="Razorpay paid but membership missing"
-              onPress={() => router.push('/(student)/profile/recover-payment')}
-              showSeparator
-            />
-            <SettingsRow
-              iconIon="mail-outline"
-              title="Help & support"
-              subtitle={lib.contact.supportEmail}
+              iconIon="help-circle-outline"
+              title="Help & FAQ"
+              clean
               onPress={openSupport}
-              showSeparator
-            />
-            <SettingsRow
-              iconIon="key-outline"
-              title="Forgot password"
-              subtitle="Reset via website"
-              onPress={openForgotPassword}
               showSeparator={false}
             />
           </Card>
 
-          <Card style={{ padding: 0, overflow: 'hidden', marginTop: 24, marginBottom: 28 }}>
-            <SettingsRow iconIon="log-out-outline" title="Sign out" destructive onPress={() => signOut()} showSeparator={false} />
-          </Card>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => signOut()}
+            style={({ pressed }) => [
+              styles.signOutBtn,
+              { borderColor: c.red700, backgroundColor: c.surface },
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <Text style={[styles.signOutText, { color: c.red700 }]}>Sign out</Text>
+          </Pressable>
         </ScrollView>
       )}
     </View>
@@ -431,55 +350,23 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  hero: { paddingTop: 24, paddingBottom: 16, paddingHorizontal: 20, alignItems: 'stretch' },
-  avatarStage: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
+  menuCard: {
+    padding: 0,
+    overflow: 'hidden',
+    borderRadius: 16,
+    marginTop: 0,
   },
-  avatarRing: {
-    borderRadius: 999,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarBusyOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 999,
-  },
-  avatarImg: { borderRadius: 999 },
-  avatarPlaceholder: { borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
-  avatarInitials: { color: '#fff', fontWeight: '700', letterSpacing: -0.5 },
-  cameraFab: {
-    position: 'absolute',
-    right: 6,
-    bottom: 10,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 3,
+  signOutBtn: {
+    marginTop: 28,
+    marginBottom: 12,
+    minHeight: 52,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  displayName: {
-    marginTop: 16,
-    textAlign: 'center',
-    alignSelf: 'center',
-  },
-  metaRow: {
-    marginTop: 16,
-    paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 14,
-    width: '100%',
-  },
-  metaBlock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
+  signOutText: {
+    fontFamily: FONT_SANS.semibold,
+    fontSize: 16,
   },
 });

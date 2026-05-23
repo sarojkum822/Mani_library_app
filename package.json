@@ -5,6 +5,8 @@
   "scripts": {
     "postinstall": "patch-package",
     "start": "expo start",
+    "start:localhost": "expo start --localhost",
+    "start:ios": "expo start --localhost --ios",
     "start:tunnel": "expo start --tunnel",
     "android": "expo run:android",
     "ios": "expo run:ios",

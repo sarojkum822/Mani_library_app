@@ -6,8 +6,11 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 import { displayPersonName } from '@/lib/formatPersonName';
+import { normalizeMemberContact } from '@/lib/memberContact';
 import type { KycDocType, MemberKycSlotSummary } from '@/lib/kycMemberSlots';
+import { cacheKeys, invalidateDataCacheKey } from '@/lib/dataCache';
 import { tryMemberProfileFromSupabase } from '@/lib/memberProfileSupabase';
+import { invalidatePublicGalleryCache } from '@/lib/publicContentCache';
 import type { Role } from '@/lib/storage';
 
 function nameFromApi(raw: unknown, fallback = 'Member'): string {
@@ -217,6 +220,78 @@ export type AdminManualEnrollResult = {
   membership_id: string;
   payment_id: string;
   temporary_password?: string;
+};
+
+export type GalleryImage = {
+  id: string;
+  url: string;
+  sortOrder?: number;
+  createdAt?: string;
+};
+
+export type PublicHeroSlot = {
+  slot: 1 | 2 | 3;
+  galleryImageId: string | null;
+  imageUrl: string | null;
+  tagline: string | null;
+  taglineSub: string | null;
+};
+
+export type PublicHeroSettings = {
+  slots: PublicHeroSlot[];
+};
+
+export type PublicTestimonial = {
+  fullName: string;
+  subtitle: string;
+  avatarUrl: string | null;
+  rating: number;
+  comment: string;
+};
+
+export type MemberFeedback = {
+  rating: number;
+  comment: string;
+  submittedAt: string;
+  approved: boolean;
+  editable: boolean;
+  editAvailableFrom: string | null;
+};
+
+export type AdminFeedbackRow = {
+  userId: string;
+  fullName: string;
+  email: string | null;
+  avatarUrl: string | null;
+  deviceUserId: number | null;
+  rating: number;
+  comment: string;
+  submittedAt: string | null;
+  approved: boolean;
+};
+
+export type AdminRecentPunch = {
+  empcode: string;
+  deviceUserId: number | null;
+  fullName: string | null;
+  punchDate: string;
+  flag: string | null;
+  source: string;
+};
+
+export type ResumableCheckout = {
+  paymentId: string;
+  orderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
+  fingerprint: string;
+  planKind: string;
+  seatNumber: number;
+  membershipStartDate: string;
+  durationKey: string;
+  amountRupees: number;
+  seatLabel: string;
 };
 
 /** Vercel production — default API origin when `EXPO_PUBLIC_API_BASE_URL` is unset (see `resolveApiBaseUrl`). */
@@ -459,12 +534,16 @@ function pickMemberProfile(j: Record<string, unknown>): MemberProfile {
   if (libraryNumber === '—' && duParsed !== undefined) {
     libraryNumber = formatDeviceUserIdLabel(duParsed);
   }
+  const contact = normalizeMemberContact(
+    typeof j.email === 'string' ? j.email : undefined,
+    typeof j.phone === 'string' ? j.phone : undefined,
+  );
   return {
     id: String(j.id ?? ''),
     role,
     name: nameFromApi(j.name, 'Member'),
-    email: typeof j.email === 'string' ? j.email : undefined,
-    phone: typeof j.phone === 'string' ? j.phone : undefined,
+    email: contact.email,
+    phone: contact.phone,
     deviceUserId,
     libraryNumber,
     avatarUrl: typeof j.avatarUrl === 'string' ? j.avatarUrl : null,
@@ -725,9 +804,17 @@ export type AdminSeatSnapshot = {
   shortTermDistinctSeats: number;
 };
 
+export type AdminOverviewChart = {
+  revenueByDay: Array<{ day: string; amountInr: number }>;
+  membershipsCreatedByDay: Array<{ day: string; count: number }>;
+  maxRevenueInr: number;
+  maxMembershipsCreated: number;
+};
+
 export type AdminOverviewSnapshot = {
   stats: AdminOverviewStats;
   seatSnapshot: AdminSeatSnapshot;
+  chart: AdminOverviewChart;
   expiringSoon: Array<{
     id: string;
     userId: string;
@@ -930,9 +1017,15 @@ export const api = {
     if (!j.token || !j.user) {
       throw new Error('Unexpected login response (missing token or user).');
     }
+    const contact = normalizeMemberContact(j.user.email, j.user.phone);
     return {
       token: j.token,
-      user: { ...j.user, name: nameFromApi(j.user.name, 'Member') },
+      user: {
+        ...j.user,
+        name: nameFromApi(j.user.name, 'Member'),
+        email: contact.email,
+        phone: contact.phone,
+      },
     };
   },
 
@@ -1014,12 +1107,13 @@ export const api = {
     );
     const du =
       parseDeviceUserIdNumber(j.deviceUserId ?? j.device_user_id) ?? parseDeviceUserIdNumber(j.libraryNumber);
+    const contact = normalizeMemberContact(j.email, j.phone);
     return {
       id: j.id,
       role: j.role,
       name: nameFromApi(j.name, 'Member'),
-      email: j.email,
-      phone: j.phone,
+      email: contact.email,
+      phone: contact.phone,
       ...(du !== undefined ? { deviceUserId: du } : {}),
     };
   },
@@ -1434,7 +1528,22 @@ export const api = {
         plan,
       };
     });
-    return { stats, seatSnapshot, expiringSoon, recentPayments };
+    const chartRaw = (j.chart ?? {}) as Record<string, unknown>;
+    const revDayRaw = Array.isArray(chartRaw.revenueByDay) ? chartRaw.revenueByDay : [];
+    const memDayRaw = Array.isArray(chartRaw.membershipsCreatedByDay) ? chartRaw.membershipsCreatedByDay : [];
+    const chart: AdminOverviewChart = {
+      revenueByDay: revDayRaw.map((row) => {
+        const r = row as Record<string, unknown>;
+        return { day: String(r.day ?? ''), amountInr: Number(r.amountInr ?? 0) || 0 };
+      }),
+      membershipsCreatedByDay: memDayRaw.map((row) => {
+        const r = row as Record<string, unknown>;
+        return { day: String(r.day ?? ''), count: Number(r.count ?? 0) || 0 };
+      }),
+      maxRevenueInr: Number(chartRaw.maxRevenueInr ?? 0) || 0,
+      maxMembershipsCreated: Number(chartRaw.maxMembershipsCreated ?? 0) || 0,
+    };
+    return { stats, seatSnapshot, chart, expiringSoon, recentPayments };
   },
 
   async adminPaymentsList(token: string): Promise<AdminPaymentsListPayload> {
@@ -1647,5 +1756,193 @@ export const api = {
       });
     }
     return { ok: true };
+  },
+
+  async publicGallery(): Promise<GalleryImage[]> {
+    const j = await request<{ images?: GalleryImage[] }>('/api/public/gallery');
+    const raw = Array.isArray(j.images) ? j.images : [];
+    return raw.map((img) => ({
+      id: String((img as GalleryImage).id ?? ''),
+      url: String((img as GalleryImage).url ?? ''),
+      sortOrder: (img as GalleryImage).sortOrder,
+      createdAt: (img as GalleryImage).createdAt,
+    }));
+  },
+
+  async publicHero(): Promise<PublicHeroSettings> {
+    const j = await request<{ hero?: PublicHeroSettings }>('/api/public/hero');
+    const hero = j.hero;
+    const slotsRaw = Array.isArray(hero?.slots) ? hero!.slots : [];
+    const slots: PublicHeroSlot[] = [1, 2, 3].map((slot) => {
+      const row = slotsRaw.find((s) => Number((s as PublicHeroSlot).slot) === slot) as PublicHeroSlot | undefined;
+      return {
+        slot: slot as 1 | 2 | 3,
+        galleryImageId: row?.galleryImageId ?? null,
+        imageUrl: row?.imageUrl?.trim() ? row.imageUrl : null,
+        tagline: row?.tagline?.trim() ? row.tagline : null,
+        taglineSub: row?.taglineSub?.trim() ? row.taglineSub : null,
+      };
+    });
+    return { slots };
+  },
+
+  async publicTestimonials(): Promise<PublicTestimonial[]> {
+    const j = await request<{ testimonials?: PublicTestimonial[] }>('/api/public/testimonials');
+    const raw = Array.isArray(j.testimonials) ? j.testimonials : [];
+    return raw.map((t) => ({
+      fullName: String((t as PublicTestimonial).fullName ?? 'Member'),
+      subtitle: String((t as PublicTestimonial).subtitle ?? 'Mani Library member'),
+      avatarUrl: (t as PublicTestimonial).avatarUrl ?? null,
+      rating: Number((t as PublicTestimonial).rating ?? 0) || 0,
+      comment: String((t as PublicTestimonial).comment ?? ''),
+    }));
+  },
+
+  async memberFeedbackGet(token: string): Promise<MemberFeedback | null> {
+    const j = await request<{ feedback?: MemberFeedback | null }>('/api/me/feedback', { token });
+    const fb = j.feedback;
+    if (!fb) return null;
+    return {
+      rating: Number(fb.rating) || 0,
+      comment: String(fb.comment ?? ''),
+      submittedAt: String(fb.submittedAt ?? ''),
+      approved: fb.approved === true,
+      editable: fb.editable === true,
+      editAvailableFrom: fb.editAvailableFrom ?? null,
+    };
+  },
+
+  async memberFeedbackSave(token: string, rating: number, comment: string): Promise<MemberFeedback> {
+    const j = await request<{ feedback?: MemberFeedback }>('/api/me/feedback', {
+      method: 'POST',
+      token,
+      body: { rating, comment },
+    });
+    const fb = j.feedback;
+    if (!fb) throw new Error('Could not save feedback.');
+    return {
+      rating: Number(fb.rating) || rating,
+      comment: String(fb.comment ?? comment),
+      submittedAt: String(fb.submittedAt ?? ''),
+      approved: fb.approved === true,
+      editable: fb.editable === true,
+      editAvailableFrom: fb.editAvailableFrom ?? null,
+    };
+  },
+
+  async memberFeedbackDelete(token: string): Promise<void> {
+    await request('/api/me/feedback', { method: 'DELETE', token });
+  },
+
+  async adminFeedbackList(token: string): Promise<AdminFeedbackRow[]> {
+    const j = await request<{ feedbacks?: AdminFeedbackRow[] }>('/api/admin/feedback/list', { token });
+    const raw = Array.isArray(j.feedbacks) ? j.feedbacks : [];
+    return raw.map((row) => ({
+      userId: String(row.userId ?? ''),
+      fullName: nameFromApi(row.fullName, 'Member'),
+      email: row.email ?? null,
+      avatarUrl: row.avatarUrl ?? null,
+      deviceUserId:
+        typeof row.deviceUserId === 'number' && Number.isFinite(row.deviceUserId) ? row.deviceUserId : null,
+      rating: Number(row.rating) || 0,
+      comment: String(row.comment ?? ''),
+      submittedAt: row.submittedAt ?? null,
+      approved: row.approved === true,
+    }));
+  },
+
+  async adminFeedbackApprove(token: string, userId: string, approved: boolean): Promise<void> {
+    await request('/api/admin/feedback/approve', {
+      method: 'POST',
+      token,
+      body: { user_id: userId, approved },
+    });
+    invalidateDataCacheKey(cacheKeys.adminFeedback);
+  },
+
+  async adminGalleryList(token: string): Promise<{ images: GalleryImage[]; maxImages: number }> {
+    const j = await request<{ images?: GalleryImage[]; maxImages?: number }>('/api/admin/gallery/list', {
+      token,
+    });
+    const images = (Array.isArray(j.images) ? j.images : []).map((img) => ({
+      id: String(img.id ?? ''),
+      url: String(img.url ?? ''),
+      sortOrder: img.sortOrder,
+      createdAt: img.createdAt,
+    }));
+    return { images, maxImages: Number(j.maxImages ?? 50) || 50 };
+  },
+
+  async adminGalleryUpload(
+    token: string,
+    file: { uri: string; mimeType: string; name: string },
+  ): Promise<GalleryImage> {
+    const base = assertBaseUrl();
+    const form = new FormData();
+    form.append('file', { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob);
+    const res = await fetch(`${base}/api/admin/gallery/upload`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'X-App-Client': 'expo',
+        Authorization: `Bearer ${token}`,
+      },
+      body: form,
+    });
+    const j = await parseJsonResponse<{ image?: GalleryImage }>(res);
+    if (!j.image?.id || !j.image?.url) throw new Error('Upload failed.');
+    invalidateDataCacheKey(cacheKeys.adminGallery);
+    invalidatePublicGalleryCache();
+    return { id: j.image.id, url: j.image.url, sortOrder: j.image.sortOrder, createdAt: j.image.createdAt };
+  },
+
+  async adminGalleryDelete(token: string, id: string): Promise<void> {
+    await request(`/api/admin/gallery/${encodeURIComponent(id)}`, { method: 'DELETE', token });
+    invalidateDataCacheKey(cacheKeys.adminGallery);
+    invalidatePublicGalleryCache();
+  },
+
+  async adminLastPunches(
+    token: string,
+    opts: { fromYmd: string; toYmd: string; empcode?: string },
+  ): Promise<AdminRecentPunch[]> {
+    const q = new URLSearchParams({ fromYmd: opts.fromYmd, toYmd: opts.toYmd });
+    const trimmed = opts.empcode?.trim();
+    if (trimmed) q.set('empcode', trimmed);
+    const j = await request<{ items?: AdminRecentPunch[] }>(`/api/admin/attendance/last-punches?${q}`, { token });
+    const raw = Array.isArray(j.items) ? j.items : [];
+    return raw.map((it) => ({
+      empcode: String(it.empcode ?? ''),
+      deviceUserId:
+        typeof it.deviceUserId === 'number' && Number.isFinite(it.deviceUserId) ? it.deviceUserId : null,
+      fullName: it.fullName ? nameFromApi(it.fullName, '—') : null,
+      punchDate: String(it.punchDate ?? ''),
+      flag: it.flag ?? null,
+      source: String(it.source ?? ''),
+    }));
+  },
+
+  async resumableCheckout(token: string): Promise<ResumableCheckout | null> {
+    const j = await request<{ resume?: ResumableCheckout | null }>('/api/payments/razorpay/resumable-checkout', {
+      token,
+    });
+    const c = j.resume;
+    if (!c?.paymentId || !c.orderId || !c.keyId) return null;
+    const seatNumber = typeof c.seatNumber === 'number' && Number.isFinite(c.seatNumber) ? c.seatNumber : NaN;
+    if (!Number.isFinite(seatNumber) || seatNumber <= 0) return null;
+    return {
+      paymentId: String(c.paymentId),
+      orderId: String(c.orderId),
+      amount: Number(c.amount) || 0,
+      currency: String(c.currency ?? 'INR'),
+      keyId: String(c.keyId),
+      fingerprint: String(c.fingerprint ?? ''),
+      planKind: String(c.planKind ?? ''),
+      durationKey: String(c.durationKey ?? ''),
+      membershipStartDate: String(c.membershipStartDate ?? ''),
+      seatLabel: String(c.seatLabel ?? ''),
+      seatNumber,
+      amountRupees: Number(c.amountRupees) || 0,
+    };
   },
 };

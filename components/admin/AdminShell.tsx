@@ -3,9 +3,12 @@ import { Animated, Easing, Platform, Pressable, StatusBar, StyleSheet, useWindow
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
-import { headerElevation } from '@/lib/platformStyles';
 import { hapticLight } from '@/lib/safeHaptics';
 import { useColorScheme } from '@/components/useColorScheme';
+import { AdminBottomNav } from '@/components/admin/AdminBottomNav';
+import { AdminCanvas } from '@/components/admin/AdminCanvas';
+import { adminGlassBarChrome } from '@/components/admin/adminGlassTheme';
+import { ADMIN_BOTTOM_NAV_HEIGHT } from '@/components/admin/navigation';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { AdminTopbar } from '@/components/admin/AdminTopbar';
 
@@ -30,6 +33,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   const topPad = adminTopInset(insets.top);
   const isWide = width >= LG_MIN_WIDTH;
+  const phoneBottomPad = !isWide ? ADMIN_BOTTOM_NAV_HEIGHT + Math.max(insets.bottom, 8) : 0;
 
   const drawerWidth = Math.min(300, Math.round(width * 0.86));
   /** Closed drawer sits off-screen to the left. */
@@ -85,27 +89,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }, [closedX, isWide, sidebarOpen, slide]);
 
   return (
-    <View
-      style={[
-        styles.root,
-        {
-          backgroundColor: c.surfaceMuted,
-          paddingTop: topPad,
-          paddingLeft: insets.left,
-          paddingRight: insets.right,
-        },
-      ]}
+    <AdminCanvas
+      style={{
+        paddingTop: topPad,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+      }}
     >
+      <View style={styles.root}>
       {isWide ? <AdminSidebar /> : null}
 
-      <View style={[styles.mainColumn, { backgroundColor: c.surfaceMuted }]}>
+      <View style={styles.mainColumn}>
         <View style={[styles.column, Platform.OS === 'android' && styles.columnAndroid]}>
           <View
-            style={[
-              styles.topbarWrap,
-              { backgroundColor: c.surface },
-              headerElevation(),
-            ]}
+            style={[styles.topbarWrap, adminGlassBarChrome(c), styles.topbarGlass]}
             onLayout={(e) => setTopbarHeight(e.nativeEvent.layout.height)}
           >
             <AdminTopbar
@@ -115,7 +112,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             />
           </View>
 
-          <View style={[styles.main, { backgroundColor: c.surfaceMuted }]}>{children}</View>
+          <View style={[styles.main, { paddingBottom: phoneBottomPad }]}>
+            {children}
+          </View>
 
           {/* Opaque layer above page content while menu animates — stops page bleeding through under the sheet transform. */}
           {!isWide && sidebarOpen ? (
@@ -125,7 +124,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 styles.menuUnderlay,
                 {
                   top: topbarHeight,
-                  backgroundColor: c.surfaceMuted,
+                  backgroundColor: 'rgba(247, 249, 252, 0.92)',
                 },
               ]}
             />
@@ -154,8 +153,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   {
                     top: topbarHeight,
                     width: drawerWidth,
-                    backgroundColor: c.surface,
-                    borderRightColor: c.border,
+                    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+                    borderRightColor: 'rgba(1, 96, 208, 0.1)',
                   },
                 ]}
               >
@@ -166,8 +165,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </>
           ) : null}
         </View>
+        {!isWide ? <AdminBottomNav onMenuPress={openSidebar} /> : null}
       </View>
-    </View>
+      </View>
+    </AdminCanvas>
   );
 }
 
@@ -182,6 +183,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     minHeight: '100%',
+    flexDirection: 'column',
   },
   column: {
     flex: 1,
@@ -194,6 +196,9 @@ const styles = StyleSheet.create({
   },
   topbarWrap: {
     zIndex: 102,
+  },
+  topbarGlass: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   menuUnderlay: {
     position: 'absolute',

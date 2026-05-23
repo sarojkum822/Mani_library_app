@@ -44,6 +44,7 @@ export default {
 
     /** Membership status pills (mirrors web emerald / amber / red). */
     emerald100: '#D1FAE5',
+    emerald700: '#047857',
     emerald800: '#065F46',
     amber100: '#FEF3C7',
     amber800: '#92400E',
@@ -88,6 +89,7 @@ export default {
     azure900: '#00132A',
 
     emerald100: '#D1FAE5',
+    emerald700: '#047857',
     emerald800: '#065F46',
     amber100: '#FEF3C7',
     amber800: '#92400E',

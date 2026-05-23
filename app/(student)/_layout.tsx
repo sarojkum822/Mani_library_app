@@ -24,7 +24,6 @@ export default function StudentTabsLayout() {
 
   const insets = useSafeAreaInsets();
   const signedIn = auth.status === 'signed_in';
-  /** Guest mode: brand (home) only — no member tabs or bottom bar until sign-in. */
   const guestMode = !signedIn;
   const showMemberTabs = signedIn;
   const tabBarBottom = Math.max(insets.bottom, 8);
@@ -59,11 +58,11 @@ export default function StudentTabsLayout() {
         tabBarInactiveTintColor: c.tabIconDefault,
         tabBarLabelStyle: {
           fontFamily: FONT_SANS.semibold,
-          fontSize: 11,
+          fontSize: 12,
           letterSpacing: 0.15,
         },
         tabBarIconStyle: { marginBottom: -2 },
-        tabBarStyle: guestMode ? { display: 'none', height: 0 } : tabBarShown,
+        tabBarStyle: guestMode ? { display: 'none' } : tabBarShown,
       }}
     >
       <Tabs.Screen
@@ -71,6 +70,20 @@ export default function StudentTabsLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="sign-in"
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            router.push('/(auth)/login');
+          },
+        }}
+        options={{
+          title: 'Sign in',
+          href: null,
+          tabBarIcon: ({ color }) => <TabBarIcon name="sign-in" color={color} />,
         }}
       />
       <Tabs.Screen

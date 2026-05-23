@@ -22,6 +22,7 @@ export function SettingsRow({
   destructive,
   detail,
   disabled,
+  clean,
 }: {
   icon?: FAName;
   iconIon?: IonName;
@@ -32,6 +33,8 @@ export function SettingsRow({
   destructive?: boolean;
   detail?: string;
   disabled?: boolean;
+  /** Title-only row (profile menu mock). */
+  clean?: boolean;
 }) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
@@ -68,8 +71,19 @@ export function SettingsRow({
         <View style={{ width: 44 }} />
       )}
       <View style={styles.textCol}>
-        <Text style={[CLARITY_BODY, styles.title, { color: titleColor, fontFamily: FONT_SANS.regular }]}>{title}</Text>
-        {subtitle ? (
+        <Text
+          style={[
+            clean ? styles.titleClean : CLARITY_BODY,
+            styles.title,
+            {
+              color: titleColor,
+              fontFamily: clean ? FONT_SANS.semibold : FONT_SANS.regular,
+            },
+          ]}
+        >
+          {title}
+        </Text>
+        {!clean && subtitle ? (
           <Text style={[CLARITY_HINT, styles.sub, { color: subColor }]}>{subtitle}</Text>
         ) : null}
       </View>
@@ -105,6 +119,7 @@ const styles = StyleSheet.create({
   },
   textCol: { flex: 1, minWidth: 0 },
   title: { fontSize: 16 },
+  titleClean: { fontSize: 16, letterSpacing: -0.15 },
   sub: { marginTop: 2 },
   detail: { fontSize: 15, maxWidth: '36%' },
   chev: { marginLeft: 2 },

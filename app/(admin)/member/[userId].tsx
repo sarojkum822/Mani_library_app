@@ -167,7 +167,7 @@ export default function AdminMemberDetailScreen() {
 
   return (
     <ScrollView
-      style={[styles.root, { backgroundColor: c.surfaceMuted }]}
+      style={styles.root}
       contentContainerStyle={adminScrollContentInsets(insets.bottom)}
       refreshControl={
         <RefreshControl refreshing={revalidating} onRefresh={() => setRefreshKey((k) => k + 1)} tintColor={c.azure500} />

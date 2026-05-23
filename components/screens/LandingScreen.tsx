@@ -20,8 +20,11 @@ import type { LibraryInfoJson } from '@/lib/libraryInfoTypes';
 import { BrandLogo } from '@/components/BrandLogo';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { PublicGallerySection } from '@/components/public/PublicGallerySection';
+import { PublicHeroCollage } from '@/components/public/PublicHeroCollage';
+import { TestimonialsSection } from '@/components/public/TestimonialsSection';
 
-type SectionKey = 'facilities' | 'about' | 'plans' | 'contact';
+type SectionKey = 'facilities' | 'about' | 'plans' | 'gallery' | 'testimonials' | 'contact';
 
 type LibraryPlan = LibraryInfoJson['plans'][number];
 
@@ -54,13 +57,14 @@ export function LandingScreen() {
   const { auth } = useAuth();
   const mp = useMemberPrefetch();
   const isStudentSignedIn = auth.status === 'signed_in' && auth.user.role === 'student';
+  const isAdminSignedIn = auth.status === 'signed_in' && auth.user.role === 'admin';
 
   const membershipStatus: MembershipStatus | null =
-    !isStudentSignedIn ? null : !mp.accountReady ? null : mp.membership?.status ?? null;
+    !isStudentSignedIn ? null : mp.loading ? null : mp.membership?.status ?? null;
   const memberHasActivePlan =
-    isStudentSignedIn && mp.accountReady && hasActiveMembership(mp.membership);
+    isStudentSignedIn && !mp.loading && hasActiveMembership(mp.membership);
   const membershipHistoryCount =
-    !isStudentSignedIn ? null : !mp.accountReady ? null : mp.payments?.length ?? null;
+    !isStudentSignedIn ? null : mp.loading ? null : mp.payments?.length ?? null;
 
   const isFirstTimeJoin =
     isStudentSignedIn &&
@@ -138,13 +142,34 @@ export function LandingScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: c.surface }} edges={['top', 'left', 'right']}>
       <View style={[styles.nav, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <BrandLogo variant="full" height={30} />
-        {isStudentSignedIn ? (
+        {isAdminSignedIn ? (
           <Pressable
-            onPress={openStudentProfileHub}
+            onPress={() => router.push('/(admin)')}
+            android_ripple={{ color: c.ink100 }}
             style={({ pressed }) => [
               styles.navAccount,
-              { borderColor: c.border, backgroundColor: c.surfaceMuted },
-              pressed && { opacity: 0.85 },
+              { borderColor: c.border, backgroundColor: c.surface },
+              pressed && { opacity: 0.88 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Open staff dashboard"
+          >
+            <View style={[styles.navAvatar, { backgroundColor: c.azure500 }]}>
+              <FontAwesome name="th-large" size={14} color="#fff" />
+            </View>
+            <Text style={[styles.navAccountLabel, { color: c.ink900 }]} numberOfLines={1}>
+              Staff dashboard
+            </Text>
+            <FontAwesome name="chevron-right" size={12} color={c.ink400} style={styles.navChevron} />
+          </Pressable>
+        ) : isStudentSignedIn ? (
+          <Pressable
+            onPress={openStudentProfileHub}
+            android_ripple={{ color: c.ink100 }}
+            style={({ pressed }) => [
+              styles.navAccount,
+              { borderColor: c.border, backgroundColor: c.surface },
+              pressed && { opacity: 0.88 },
             ]}
             accessibilityRole="button"
             accessibilityLabel="Open your profile"
@@ -157,7 +182,7 @@ export function LandingScreen() {
             <Text style={[styles.navAccountLabel, { color: c.ink900 }]} numberOfLines={1}>
               Hi, {memberLabel}
             </Text>
-            <FontAwesome name="chevron-right" size={12} color={c.ink400} />
+            <FontAwesome name="chevron-right" size={12} color={c.ink400} style={styles.navChevron} />
           </Pressable>
         ) : (
           <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
@@ -174,17 +199,8 @@ export function LandingScreen() {
         )}
       </View>
 
-      {!isStudentSignedIn ? (
-        <View style={[styles.guestRibbon, { backgroundColor: c.surfaceMuted, borderBottomColor: c.border }]}>
-          <Text style={[styles.guestRibbonText, { color: c.ink600 }]}>
-            Guest mode — scroll to membership plans below, or sign in for attendance and your account.
-          </Text>
-        </View>
-      ) : !mp.accountReady ? (
-        <View style={[styles.guestRibbon, { backgroundColor: c.surfaceMuted, borderBottomColor: c.border }]}>
-          <Text style={[styles.guestRibbonText, { color: c.ink600 }]}>Loading your account…</Text>
-        </View>
-      ) : isFirstTimeJoin ? (
+      {isStudentSignedIn && !mp.loading ? (
+        isFirstTimeJoin ? (
         <View style={[styles.guestRibbon, { backgroundColor: c.azure50, borderBottomColor: c.azure200 }]}>
           <Text style={[styles.guestRibbonText, { color: c.azure700 }]}>
             Welcome — you have not joined yet. Tap Join now below to pick a plan and choose your seat.
@@ -196,6 +212,7 @@ export function LandingScreen() {
             No active membership yet — use Complete membership below to choose a plan and finish setup.
           </Text>
         </View>
+      ) : null
       ) : null}
 
       <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: 48 }}>
@@ -236,17 +253,23 @@ export function LandingScreen() {
             <View style={{ marginTop: 14, gap: 10, alignSelf: 'stretch', width: '100%' }}>
               <Button
                 title={
-                  !isStudentSignedIn
-                    ? 'Reserve your seat'
-                    : isFirstTimeJoin
-                      ? 'Join now'
-                    : membershipStatus === 'none'
-                      ? 'Complete membership'
-                      : membershipStatus === null
-                        ? 'Membership'
-                        : 'My membership'
+                  isAdminSignedIn
+                    ? 'Go to dashboard'
+                    : !isStudentSignedIn
+                      ? 'Reserve your seat'
+                      : isFirstTimeJoin
+                        ? 'Join now'
+                        : membershipStatus === 'none'
+                          ? 'Complete membership'
+                          : membershipStatus === null
+                            ? 'Membership'
+                            : 'My membership'
                 }
                 onPress={() => {
+                  if (isAdminSignedIn) {
+                    router.push('/(admin)');
+                    return;
+                  }
                   if (!isStudentSignedIn) {
                     router.push('/(auth)/login');
                     return;
@@ -284,19 +307,7 @@ export function LandingScreen() {
               )}
             </View>
 
-            <View style={[styles.heroStatsCard, { borderColor: c.ink100, alignSelf: 'stretch', width: '100%' }]}>
-              <View style={[styles.heroStatsGrid, { backgroundColor: c.ink100 }]}>
-                {[{ label: 'Quiet zones', value: '8' }, { label: 'Cabins', value: '120' }, { label: 'Always open', value: '24/7' }].map(
-                  (it, idx) => (
-                    <View key={it.label} style={[styles.heroStatCell, { backgroundColor: c.surface }]}>
-                      <Text style={[styles.heroStatValue, { color: c.azure500 }]}>{it.value}</Text>
-                      <Text style={[styles.heroStatLabel, { color: c.ink500 }]}>{it.label}</Text>
-                      {idx < 2 ? <View style={[styles.cellDivider, { backgroundColor: c.ink100 }]} /> : null}
-                    </View>
-                  )
-                )}
-              </View>
-            </View>
+            <PublicHeroCollage style={{ marginTop: 16, alignSelf: 'stretch', width: '100%' }} />
           </View>
         </View>
 
@@ -428,6 +439,30 @@ export function LandingScreen() {
               />
             ))}
           </View>
+        </View>
+
+        <View
+          onLayout={onSectionLayout('gallery')}
+          style={{ paddingHorizontal: 16, paddingTop: rhythm.sectionTop, backgroundColor: c.surface }}
+        >
+          <Text style={[styles.kicker, { color: c.azure500 }]}>Gallery</Text>
+          <Text style={[styles.h2, { color: c.ink900 }]}>Life at the library</Text>
+          <Text style={[styles.sectionP, { color: c.ink600, marginBottom: 12 }]}>
+            Photos from our study halls and community.
+          </Text>
+          <PublicGallerySection maxCount={8} />
+        </View>
+
+        <View
+          onLayout={onSectionLayout('testimonials')}
+          style={{ paddingHorizontal: 16, paddingTop: rhythm.sectionTop, backgroundColor: c.surfaceMuted }}
+        >
+          <Text style={[styles.kicker, { color: c.azure500 }]}>Testimonials</Text>
+          <Text style={[styles.h2, { color: c.ink900 }]}>What members say</Text>
+          <Text style={[styles.sectionP, { color: c.ink600, marginBottom: 12 }]}>
+            Approved feedback from verified members.
+          </Text>
+          <TestimonialsSection />
         </View>
 
         <View onLayout={onSectionLayout('contact')} style={{ backgroundColor: c.surfaceMuted }}>
@@ -805,11 +840,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     maxWidth: '58%',
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 999,
     paddingLeft: 4,
-    paddingRight: 10,
+    paddingRight: 12,
     paddingVertical: 4,
+    overflow: 'hidden',
   },
   navAvatar: {
     width: 32,
@@ -817,11 +853,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   navAvatarText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  navAccountLabel: { flex: 1, fontSize: 14, fontWeight: '600', minWidth: 0 },
+  navAccountLabel: { fontSize: 14, fontWeight: '600', flexShrink: 1 },
+  navChevron: { flexShrink: 0, marginLeft: 2 },
 
-  heroBg: { height: 420, position: 'absolute', left: 0, right: 0, top: 0 },
+  heroBg: { height: 480, position: 'absolute', left: 0, right: 0, top: 0 },
   gridOverlay: {
     ...StyleSheet.absoluteFillObject,
     borderTopWidth: 1,
@@ -924,7 +962,6 @@ const styles = StyleSheet.create({
   facCell: { width: '33.3333%', paddingHorizontal: 6, paddingVertical: 6 },
   facCard: {
     padding: 12,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,

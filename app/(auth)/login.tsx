@@ -15,7 +15,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Redirect, router } from 'expo-router';
 
-import { AuthMarketingPanel } from '@/components/auth/AuthMarketingPanel';
 import { AuthModeSegment, type AuthMode } from '@/components/auth/AuthModeSegment';
 import { AuthPasswordField } from '@/components/auth/AuthPasswordField';
 import { SignupVerificationPanel } from '@/components/auth/SignupVerificationPanel';
@@ -29,8 +28,10 @@ import { Button } from '@/components/ui/Button';
 import { TextField } from '@/components/ui/TextField';
 import libraryInfo from '@/data/libraryInfo.json';
 import { api } from '@/lib/api';
+import { IndianPhoneField } from '@/components/ui/IndianPhoneField';
 import { FIELD_LIMITS } from '@/lib/fieldLimits';
 import { formatPersonName } from '@/lib/formatPersonName';
+import { normalizeIndianMobile10 } from '@/lib/indianPhone';
 import { loadPendingSignup, savePendingSignup, startSignupEmailCooldown } from '@/lib/signupVerification';
 import { forgotPasswordUrl } from '@/lib/siteUrls';
 
@@ -54,8 +55,6 @@ export default function LoginScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
   const [signUpError, setSignUpError] = useState<string | null>(null);
-  const [showMarketing, setShowMarketing] = useState(false);
-
   useEffect(() => {
     void loadPendingSignup().then((pending) => {
       if (!pending) return;
@@ -91,7 +90,7 @@ export default function LoginScreen() {
   const canSignUp = useMemo(() => {
     if (name.trim().length < 2) return false;
     if (!email.includes('@')) return false;
-    if (phone.trim().length < 8) return false;
+    if (!normalizeIndianMobile10(phone)) return false;
     if (password.length < FIELD_LIMITS.passwordMin) return false;
     if (password.length > FIELD_LIMITS.passwordMax) return false;
     return password === confirmPassword;
@@ -110,7 +109,7 @@ export default function LoginScreen() {
       const res = await api.signUp({
         name: formattedName,
         email: email.trim(),
-        phone: phone.trim(),
+        phone: normalizeIndianMobile10(phone) ?? '',
         password,
       });
       if (res.token && res.user) {
@@ -149,8 +148,23 @@ export default function LoginScreen() {
     ? `Sign in to your ${libraryInfo.name} account with the email and password you used at registration.`
     : 'Sign up to get a member number, then sign in to pick plans, seats, and renewals.';
 
+  const centerSignInForm = isSignIn && !verificationSent;
+
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: c.surface }]} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: c.surface }]} edges={['top', 'left', 'right', 'bottom']}>
+      <View style={styles.topBar}>
+        <BrandLogo variant="full" height={36} />
+        <Pressable
+          onPress={() => router.replace('/(student)')}
+          hitSlop={10}
+          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+          accessibilityRole="button"
+          accessibilityLabel="Back to home"
+        >
+          <Text style={[styles.backLink, { color: c.ink500 }]}>← Back to home</Text>
+        </Pressable>
+      </View>
+
       <KeyboardAvoidingView
         style={styles.kav}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -158,23 +172,14 @@ export default function LoginScreen() {
       >
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            centerSignInForm && styles.scrollContentCentered,
+          ]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
-            <BrandLogo variant="full" height={36} />
-            <Pressable
-              onPress={() => router.replace('/(student)')}
-              hitSlop={10}
-              style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
-              accessibilityRole="button"
-              accessibilityLabel="Back to home"
-            >
-              <Text style={[styles.backLink, { color: c.ink500 }]}>← Back to home</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.formBlock}>
+          <View style={[styles.pageCenter, centerSignInForm && styles.pageCenterCentered]}>
+            <View style={styles.formBlock}>
             <View style={styles.kickerRow}>
               <FontAwesome name={kickerIcon} size={14} color={c.azure500} />
               <Text style={[styles.kicker, { color: c.azure500 }]}>{kicker}</Text>
@@ -269,15 +274,7 @@ export default function LoginScreen() {
                       autoCapitalize="none"
                       maxLength={FIELD_LIMITS.emailMax}
                     />
-                    <TextField
-                      variant="auth"
-                      label="Phone"
-                      value={phone}
-                      onChangeText={setPhone}
-                      placeholder="+91 ..."
-                      keyboardType="phone-pad"
-                      maxLength={FIELD_LIMITS.phoneMax}
-                    />
+                    <IndianPhoneField value={phone} onChangeText={setPhone} />
                     <AuthPasswordField
                       value={password}
                       onChangeText={setPassword}
@@ -304,38 +301,24 @@ export default function LoginScreen() {
 
               </View>
             )}
-          </View>
-
-          <View style={[styles.metaFoot, { borderTopColor: c.ink100 }]}>
-            <View style={styles.metaItem}>
-              <FontAwesome name="map-marker" size={12} color={c.ink400} />
-              <Text style={[styles.metaText, { color: c.ink400 }]}>
-                {libraryInfo.address.city}, {libraryInfo.address.state}
-              </Text>
             </View>
-            <Text style={[styles.metaDot, { color: c.ink300 }]}>·</Text>
-            <View style={styles.metaItem}>
-              <FontAwesome name="clock-o" size={12} color={c.ink400} />
-              <Text style={[styles.metaText, { color: c.ink400 }]}>{libraryInfo.hours}</Text>
-            </View>
-          </View>
 
-          {!verificationSent ? (
-            <View style={styles.marketingWrap}>
-              <Pressable
-                onPress={() => setShowMarketing((v) => !v)}
-                style={({ pressed }) => [styles.marketingToggle, pressed ? { opacity: 0.75 } : null]}
-                accessibilityRole="button"
-                accessibilityState={{ expanded: showMarketing }}
-              >
-                <Text style={[styles.marketingToggleText, { color: c.ink600 }]}>
-                  {showMarketing ? 'Hide' : 'Why join'} {libraryInfo.name}
+            {!centerSignInForm ? (
+            <View style={[styles.metaFoot, { borderTopColor: c.ink100 }]}>
+              <View style={styles.metaItem}>
+                <FontAwesome name="map-marker" size={12} color={c.ink400} />
+                <Text style={[styles.metaText, { color: c.ink400 }]}>
+                  {libraryInfo.address.city}, {libraryInfo.address.state}
                 </Text>
-                <FontAwesome name={showMarketing ? 'chevron-up' : 'chevron-down'} size={12} color={c.ink500} />
-              </Pressable>
-              {showMarketing ? <AuthMarketingPanel /> : null}
+              </View>
+              <Text style={[styles.metaDot, { color: c.ink300 }]}>·</Text>
+              <View style={styles.metaItem}>
+                <FontAwesome name="clock-o" size={12} color={c.ink400} />
+                <Text style={[styles.metaText, { color: c.ink400 }]}>{libraryInfo.hours}</Text>
+              </View>
             </View>
-          ) : null}
+            ) : null}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -346,26 +329,42 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   kav: { flex: 1 },
   scrollContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 32,
     flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 32,
   },
-  header: {
+  scrollContentCentered: {
+    justifyContent: 'center',
+    paddingTop: 8,
+  },
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 4,
-    marginBottom: 8,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  pageCenter: {
+    flexGrow: 1,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+    paddingTop: 12,
+    gap: 24,
+  },
+  pageCenterCentered: {
+    flexGrow: 0,
+    paddingTop: 0,
+    gap: 0,
   },
   backLink: {
     fontSize: 14,
-    fontFamily: FONT_SANS.regular,
+    fontFamily: FONT_SANS.semibold,
   },
   formBlock: {
-    paddingVertical: 20,
-    maxWidth: 440,
     width: '100%',
-    alignSelf: 'center',
   },
   kickerRow: {
     flexDirection: 'row',
@@ -401,22 +400,14 @@ const styles = StyleSheet.create({
   },
   forgotRow: { alignSelf: 'flex-end', marginTop: -4 },
   forgotLink: { fontSize: 13, fontFamily: FONT_SANS.semibold },
-  marketingWrap: { marginTop: 8, gap: 12 },
-  marketingToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-  },
-  marketingToggleText: { fontSize: 14, fontFamily: FONT_SANS.medium },
   metaFoot: {
+    marginTop: 'auto',
+    paddingTop: 20,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingTop: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },

@@ -31,7 +31,7 @@ export function AdminPageHeader({ eyebrow, title, description, actions, style, h
       <View style={styles.textBlock}>
         {eyebrow ? (
           <Text
-            style={[styles.eyebrow, CLARITY_METRIC_LABEL, { color: c.ink500, fontSize: scaled(10) }]}
+            style={[styles.eyebrow, CLARITY_METRIC_LABEL, { color: c.azure600, fontSize: scaled(10) }]}
             maxFontSizeMultiplier={1.5}
             accessibilityLabel={eyebrow}
           >
@@ -40,7 +40,7 @@ export function AdminPageHeader({ eyebrow, title, description, actions, style, h
         ) : null}
         <Text
           style={[
-            clarityPageTitle(scaled(hero ? 32 : 26)),
+            clarityPageTitle(scaled(hero ? 34 : 28)),
             { color: c.ink900 },
             Platform.OS === 'ios' && styles.titleIos,
           ]}
@@ -50,7 +50,7 @@ export function AdminPageHeader({ eyebrow, title, description, actions, style, h
         </Text>
         {description ? (
           <Text
-            style={[CLARITY_BODY, { color: c.ink600, fontSize: scaled(15) }]}
+            style={[CLARITY_BODY, { color: c.ink600, fontSize: scaled(16) }]}
             maxFontSizeMultiplier={1.65}
           >
             {description}
